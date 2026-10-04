@@ -1,3 +1,5 @@
 # Obsolete locked directory left after the AssetFlow rename
 /claimflow/
 
+# Local browser render artifacts
+/assetflow/portfolio/.preview/
