@@ -1,0 +1,34 @@
+date,experiment,config,metric_name,metric_value,api_cost_usd,notes
+2026-09-22,policy_retrieval,text-embedding-3-small/6policies/situation_text,recall@1,0.83,0.00,개발용 6문항. situation_text 작성 시 참고한 표현과 겹쳐 낙관적
+2026-09-22,policy_retrieval,text-embedding-3-small/6policies/situation_text,recall@3,1.00,0.00,같은 실행. OWNERSHIP 만 3위
+2026-09-23,route_classification,gpt-4o-mini/t=0/prompt-v1,route_accuracy,0.50,0.00,4문항. 판정 순서 없음. need_review 로 쏠림
+2026-09-23,route_classification,gpt-4o-mini/t=0/prompt-v2,route_accuracy,0.75,0.00,판정 순서 추가. 대상 자산 선정 단계 없어 4번 오판
+2026-09-23,route_classification,gpt-4o-mini/t=0/prompt-v3,route_accuracy,1.00,0.00,대상 선정 1단계 분리 + null 이 정상 결과임을 명시. 4문항이라 표본 매우 작음
+2026-09-23,route_classification,gpt-4o-mini/t=0/prompt-v3/rag-top3,cost_usd_per_request,0.000204,0.000816,4건 평균. prompt 1029-1053 tokens. 지연 load 1-5ms / retrieve 238-3071ms / decide 1163-2403ms
+2026-09-26,route_classification,gpt-4o-mini/t=0/prompt-v4/rag-top3,route_accuracy,0.67,0.00,6문항. 어휘 보강 + 판정 규칙에서 설명 제거 + 대상 값 복사 단계. 수량 미명시 2건 실패
+2026-09-26,route_classification,gpt-4o-mini/t=0/prompt-v5/rag-top3,route_accuracy,0.83,0.00,수량 미명시 기본값 1 추가. 말투 불확실성으로 need_info 오판 1건 잔존
+2026-09-26,route_classification,gpt-4o-mini/t=0/prompt-v6/rag-top3,route_accuracy,1.00,0.00,말투는 판정 근거가 아님을 명시. 6문항이라 표본 매우 작음
+2026-09-28,route_classification,gpt-4o-mini/t=0/prompt-v6/rag-top3/eval-dev-8,route_accuracy,0.62,0.001925,고정 평가셋 8문항 기준선. need_review 2건이 need_info 로 감. DEV-06 은 미특정 자산을 추론해 propose
+2026-09-28,route_classification,gpt-4o-mini/t=0/prompt-v6/rag-top3/eval-dev-8,item_accuracy,0.75,0.00,같은 실행. DEV-03 은 평가셋 라벨 오류로 확인되어 PHN-01 로 수정
+2026-09-28,route_classification,gpt-4o-mini/t=0/prompt-v6/rag-top3/eval-dev-8,policy_accuracy,0.75,0.00,같은 실행. DEV-05·DEV-07 오답. 정답 규정은 검색 top-3 안에 있었으므로 검색이 아니라 인용 선택의 문제
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v6/rag-top3/eval-dev-8,route_accuracy,0.62,0.005797,3회 반복 평균 min 0.62 max 0.62. 고정 DB 상태에서 3회 완전 동일. 실패는 DEV-02·DEV-06·DEV-07 로 매번 같음
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v6/no-policies/eval-dev-8,route_accuracy,0.92,0.004277,3회 반복 평균 min 0.88 max 1.00. 동일 프롬프트인데 DEV-02 가 need_info/need_review 로 흔들림
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v6/rag-top3/eval-dev-8,policy_accuracy,0.75,0.00,같은 실행. 규정을 넣어야 인용이 가능하다
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v6/no-policies/eval-dev-8,policy_accuracy,0.12,0.00,같은 실행. 규정을 안 넣으면 인용할 것이 없다. DEV-06 만 기대값이 null 이라 통과
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v7/rag-top3/eval-dev-8,route_accuracy,0.88,0.006893,3회 반복 평균 min 0.88 max 0.88. v6 의 0.62 에서 상승. DEV-02·DEV-07 이 need_review 로 교정됨. DEV-06 은 여전히 propose
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v7/rag-top3/eval-dev-8,item_accuracy,0.88,0.00,같은 실행. DEV-06 만 실패
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v7/rag-top3/eval-dev-8,policy_accuracy,0.67,0.00,같은 실행 min 0.62 max 0.75. v6 의 0.75 에서 하락. 판정에서 규정을 떼어낸 대가로 DEV-02 의 인용이 불안정해짐
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v8/rag-top3/eval-dev-8,route_accuracy,0.88,0.007290,3회 반복 평균 min 0.88 max 0.88. v7 과 동일. 대상 선정 시 점검 상태를 보지 말라는 금지가 효과 없음. DEV-06 3회 모두 propose
+2026-09-29,route_classification,gpt-4o-mini/t=0/prompt-v8/rag-top3/eval-dev-8,policy_accuracy,0.71,0.00,같은 실행 min 0.62 max 0.75. v7 의 0.67 과 범위가 겹쳐 개선으로 보지 않음
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v9/rag-top3/eval-dev-8,route_accuracy,1.00,0.007289,3회 반복 min 1.00 max 1.00. v8 의 0.88 에서 상승. 프롬프트가 아니라 코드 검증(verify_target)으로 DEV-06 교정. 개발셋은 튜닝 대상이므로 일반화 근거 아님
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v9/rag-top3/eval-dev-8,item_accuracy,1.00,0.00,같은 실행 min 1.00 max 1.00
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v9/rag-top3/eval-dev-8,policy_accuracy,0.67,0.00,같은 실행 min 0.62 max 0.75. 인용은 손대지 않아 변화 없음. DEV-05·DEV-07 항상 오답 · DEV-02 흔들림
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v10+close-fix/rag-top3/eval-dev-8,policy_accuracy,0.88,0.002080,1회 실행. 0.62 에서 상승. write_proposal 이 경로를 뒤집을 때 _close 가 인용을 다시 고르도록 수정. 남은 오답 DEV-02 는 route 문제
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v10+close-fix/rag-top3/eval-dev-8,route_accuracy,0.88,0.00,같은 실행. 변화 없음. DEV-02 의 need_info 오판은 단계 115 에서 다룸
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v11/rag-top3/eval-final-16,route_accuracy,0.88,0.010902,3회 반복 min 0.88 max 0.88. 최종 평가셋 1회 측정. 개발셋 1.00 대비 0.12 하락. 실패는 FIN-15·16 으로 ASSET_TERMS 에 없는 어휘(액정·허브)
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v11/rag-top3/eval-final-16,item_accuracy,0.88,0.00,같은 실행. 실패 원인은 route 와 동일
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v11/rag-top3/eval-final-16,policy_accuracy,0.81,0.00,같은 실행. FIN-12 는 route 는 맞았으나 COST-LIABILITY 가 검색 top-3 에 없어 빈 배열. 6개 규정의 거리가 0.68~0.78 에 몰려 순위가 불안정
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v11/rag-top3/eval-dev-8,route_accuracy,1.00,0.005451,3회 반복 min 1.00 max 1.00. 경로 판정을 코드(route_from_facts)로 이관. LLM 은 대상·수량·귀책주제만 답한다. 규칙 4개 중 3개가 값 비교였음
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v11/rag-top3/eval-dev-8,item_accuracy,1.00,0.00,같은 실행 min 1.00 max 1.00
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v11/rag-top3/eval-dev-8,policy_accuracy,1.00,0.00,같은 실행 min 1.00 max 1.00
+2026-09-29,route_classification,gpt-4o-mini/t=0/decide-v11/rag-top3/eval-dev-8,cost_usd_per_request,0.00182,0.00,같은 실행. v10+close-fix 의 0.00208 에서 감소. 출력 필드가 줄어든 만큼

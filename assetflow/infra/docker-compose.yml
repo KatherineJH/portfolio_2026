@@ -1,0 +1,20 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: assetflow-db
+    environment:
+      POSTGRES_DB: assetflow
+      POSTGRES_USER: assetflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?infra/.env 에 POSTGRES_PASSWORD 를 설정하십시오}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - assetflow-pgdata:/var/lib/postgresql/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assetflow -d assetflow"]
+      interval: 5s
+      retries: 12
+
+volumes:
+  assetflow-pgdata:

@@ -1,0 +1,8 @@
+{"id":"DEV-01","type":"정상 교체","employee":"kim","message":"독 2개 중 1개가 충전이 안 돼요. 하나만 교체해 주세요.","expect_route":["propose"],"expect_item":"DOCK-01","expect_qty":1,"expect_policy":"REPLACE-FAULTY"}
+{"id":"DEV-02","type":"점검 미완","employee":"kim","message":"노트북이 자꾸 꺼집니다.","expect_route":["need_review"],"expect_item":"LAP-01","expect_qty":null,"expect_policy":"INSPECTION-REQUIRED"}
+{"id":"DEV-03","type":"귀책·비용","employee":"park","message":"휴대폰을 떨어뜨렸는데 제가 물어내야 하나요?","expect_route":["escalate"],"expect_item":"PHN-01","expect_qty":null,"expect_policy":"COST-LIABILITY"}
+{"id":"DEV-04","type":"수량 미명시","employee":"lee","message":"모니터가 안 켜집니다. 교체 부탁드립니다.","expect_route":["propose"],"expect_item":"MON-01","expect_qty":1,"expect_policy":"REPLACE-FAULTY"}
+{"id":"DEV-05","type":"수량 초과","employee":"kim","message":"독 3개 전부 새것으로 바꿔 주세요.","expect_route":["need_info"],"expect_item":"DOCK-01","expect_qty":null,"expect_policy":"REPLACE-QTY"}
+{"id":"DEV-06","type":"대상 불명","employee":"kim","message":"지급받은 장비 하나가 고장났어요.","expect_route":["need_info","need_review"],"expect_item":null,"expect_qty":null,"expect_policy":null}
+{"id":"DEV-07","type":"점검 거절됨","employee":"park","message":"독이 인식이 안 됩니다. 교체해 주세요.","expect_route":["need_review"],"expect_item":"DOCK-01","expect_qty":null,"expect_policy":"INSPECTION-REQUIRED"}
+{"id":"DEV-08","type":"말투 불확실","employee":"park","message":"휴대폰이 고장난 것 같아요. 교체해 주시면 좋겠어요.","expect_route":["propose"],"expect_item":"PHN-01","expect_qty":1,"expect_policy":"REPLACE-FAULTY"}
