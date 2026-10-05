@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import {
   decide,
   execute,
@@ -97,11 +97,11 @@ function App() {
     }
   }
 
-  function useExample(message: string) {
+  function fillExample(message: string) {
     setDraft(message)
   }
 
-  async function refreshRuns() {
+  const refreshRuns = useCallback(async () => {
     setRunsLoading(true)
     setRunsError(null)
     try {
@@ -112,7 +112,7 @@ function App() {
     } finally {
       setRunsLoading(false)
     }
-  }
+  }, [])
 
   async function onToggleRun(runId: string) {
     if (openRun === runId) {
@@ -129,7 +129,7 @@ function App() {
     }
   }
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -140,7 +140,7 @@ function App() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [tab])
 
   // onDecide 핸들러 추가
   async function onDecide(proposalId: number, choice: 'approve' | 'reject') {
@@ -187,12 +187,15 @@ function App() {
   }
 
   useEffect(() => {
-    refresh()
-  }, [tab])
+    const timer = window.setTimeout(() => void refresh(), 0)
+    return () => window.clearTimeout(timer)
+  }, [refresh])
 
   useEffect(() => {
-    if (view === 'observability') refreshRuns()
-  }, [view])
+    if (view !== 'observability') return
+    const timer = window.setTimeout(() => void refreshRuns(), 0)
+    return () => window.clearTimeout(timer)
+  }, [refreshRuns, view])
 
   return (
     <div className="app-shell">
@@ -410,20 +413,20 @@ function App() {
                 <p>현재 페르소나의 지급 자산에 맞는 문장을 선택해 보세요.</p>
                 {employeePersona.id === 1 && (
                   <>
-                    <button type="button" onClick={() => useExample('지급받은 USB-C 독 2개가 모두 고장 나서 교체가 필요합니다.')}>독 2개 교체 요청</button>
-                    <button type="button" onClick={() => useExample('노트북이 고장 난 것 같아서 교체하고 싶습니다.')}>점검 전 노트북 요청</button>
+                    <button type="button" onClick={() => fillExample('지급받은 USB-C 독 2개가 모두 고장 나서 교체가 필요합니다.')}>독 2개 교체 요청</button>
+                    <button type="button" onClick={() => fillExample('노트북이 고장 난 것 같아서 교체하고 싶습니다.')}>점검 전 노트북 요청</button>
                   </>
                 )}
                 {employeePersona.id === 2 && (
                   <>
-                    <button type="button" onClick={() => useExample('지급받은 모니터 2개를 모두 교체해 주세요.')}>모니터 2개 교체 요청</button>
-                    <button type="button" onClick={() => useExample('맥북이 작동하지 않아 교체가 필요합니다.')}>점검 전 맥북 요청</button>
+                    <button type="button" onClick={() => fillExample('지급받은 모니터 2개를 모두 교체해 주세요.')}>모니터 2개 교체 요청</button>
+                    <button type="button" onClick={() => fillExample('맥북이 작동하지 않아 교체가 필요합니다.')}>점검 전 맥북 요청</button>
                   </>
                 )}
                 {employeePersona.id === 3 && (
                   <>
-                    <button type="button" onClick={() => useExample('갤럭시 휴대폰이 고장 나서 교체가 필요합니다.')}>휴대폰 교체 요청</button>
-                    <button type="button" onClick={() => useExample('USB-C 독이 고장 나서 교체하고 싶습니다.')}>점검 반려 자산 요청</button>
+                    <button type="button" onClick={() => fillExample('갤럭시 휴대폰이 고장 나서 교체가 필요합니다.')}>휴대폰 교체 요청</button>
+                    <button type="button" onClick={() => fillExample('USB-C 독이 고장 나서 교체하고 싶습니다.')}>점검 반려 자산 요청</button>
                   </>
                 )}
                 <div className="guardrail-note">

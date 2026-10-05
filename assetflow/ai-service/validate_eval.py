@@ -1,5 +1,6 @@
 """최종 평가셋의 형식만 검사한다. 사례 내용은 출력하지 않는다."""
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -16,6 +17,19 @@ POLICIES = {"REPLACE-FAULTY", "REPLACE-QTY", "REPLACE-STOCK",
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="최종 평가셋의 내용은 출력하지 않고 형식과 분포만 검사한다."
+    )
+    parser.add_argument(
+        "--min-cases", type=int, default=1,
+        help="요구하는 최소 전체 사례 수",
+    )
+    parser.add_argument(
+        "--min-per-route", type=int, default=0,
+        help="각 route가 최소 몇 번 이상 기대값에 포함돼야 하는지",
+    )
+    args = parser.parse_args()
+
     errors: list[str] = []
     ids: list[str] = []
     routes: dict[str, int] = {}
@@ -57,6 +71,20 @@ def main() -> None:
     dup = sorted({i for i in ids if ids.count(i) > 1})
     if dup:
         errors.append(f"id 중복: {dup}")
+
+    if len(ids) < args.min_cases:
+        errors.append(
+            f"사례 수 부족: {len(ids)}건 (최소 {args.min_cases}건 필요)"
+        )
+
+    if args.min_per_route:
+        for route in sorted(ROUTES):
+            count = routes.get(route, 0)
+            if count < args.min_per_route:
+                errors.append(
+                    f"route 분포 부족: {route} {count}건 "
+                    f"(최소 {args.min_per_route}건 필요)"
+                )
 
     print(f"사례 {len(ids)}건")
     for route in sorted(routes):

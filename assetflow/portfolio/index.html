@@ -80,7 +80,7 @@
         <div class="section-shell">
           <div class="section-heading light">
             <p class="eyebrow">01 · QUALITY PROBLEM</p>
-            <h2>Agent의 품질은 답변이 아니라<br />업무 상태가 바뀌는 순간 드러납니다.</h2>
+            <h2>Agent의 품질은 답변이 아니라, <br />업무 상태가 바뀌는 순간 드러납니다.</h2>
             <p>자산 요청에서 한 번의 오판은 잘못된 승인, 중복 지급, 음수 재고로 이어집니다. 그래서 실패 가능성을 먼저 정의했습니다.</p>
           </div>
           <div class="risk-grid">
@@ -95,7 +95,9 @@
       <section id="system" class="section section-paper">
         <div class="section-shell">
           <div class="section-heading split-heading">
-            <div><p class="eyebrow">02 · SYSTEM DESIGN</p><h2>LLM은 해석하고,<br />서버가 결정합니다.</h2></div>
+            <div>
+              <p class="eyebrow">02 · SYSTEM DESIGN</p>
+              <h2>LLM은 해석하고,<br />서버가 결정합니다.</h2></div>
             <p>모델의 역할을 대상·수량·귀책 주제 추출로 제한했습니다. 경로, 권한, 인용 규정, 수량 가능 여부는 코드와 데이터베이스가 결정합니다.</p>
           </div>
 
@@ -140,7 +142,7 @@
           </ol>
 
           <div class="test-band">
-            <div><p class="eyebrow">AUTOMATED EVIDENCE</p><h3>47 passed · 0 failed</h3><p>API, 권한, 제약조건, 동시성, 실행 트랜잭션, 그래프 라우팅과 대상 검증을 자동화했습니다.</p></div>
+            <div><p class="eyebrow">AUTOMATED EVIDENCE</p><h3>47 passed · 0 failed</h3><p>API, 권한, 제약조건, 동시성, 실행 트랜잭션, 그래프 라우팅과 대상 검증을 자동화했습니다. GitHub Actions가 백엔드 테스트와 프런트엔드 lint·build를 각각 검사하도록 구성했습니다.</p></div>
             <div class="test-tags" aria-label="테스트 범주"><span>Authorization</span><span>Idempotency</span><span>Concurrency</span><span>Transaction</span><span>Routing</span><span>Target verification</span></div>
           </div>
         </div>
@@ -223,7 +225,7 @@
             <div role="row"><span role="cell">권한 없는 운영자의 승인 거부</span><span role="cell">OAuth/JWT 기반 실제 인증</span></div>
             <div role="row"><span role="cell">승인 후 재고·수량 원자적 반영</span><span role="cell">외부 지급·구매 시스템 연동</span></div>
             <div role="row"><span role="cell">합성 16건의 held-out 반복 평가</span><span role="cell">독립 작성 대규모 평가셋</span></div>
-            <div role="row"><span role="cell">로컬 Docker와 프로덕션 빌드</span><span role="cell">클라우드 HA·CI/CD Quality Gate</span></div>
+            <div role="row"><span role="cell">로컬 Docker·프로덕션 빌드·CI workflow 구성</span><span role="cell">클라우드 HA·branch protection·배포 승인 연계</span></div>
           </div>
         </div>
       </section>

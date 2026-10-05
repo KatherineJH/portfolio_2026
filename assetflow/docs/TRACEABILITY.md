@@ -1,6 +1,34 @@
 # AssetFlow 필수 검증·시나리오 대응표
 
-상태: 설계만 완료. 아래 항목은 아직 구현·실행되지 않았다. AR은 업무 흐름, SYS는 상태·장애·공격 조건을 명시한 시스템 시나리오다. 업무 사례만으로 시스템 보장을 입증하지 않는다.
+상태: 구현 및 검증 진행 중. 아래 표는 목표 보장 조건이며, 모든 행이 자동화됐다는 뜻이 아니다. AR은 업무 흐름, SYS는 상태·장애·공격 조건을 명시한 시스템 시나리오다. 업무 사례만으로 시스템 보장을 입증하지 않는다.
+
+## 현재 검증 상태 — 2026-10-05
+
+현재 자동화 스위트는 47개 테스트이며 로컬에서 `47 passed, 0 failed`를 확인했다. GitHub Actions의 `AssetFlow Quality Gate`는 같은 백엔드 테스트와 프론트엔드 lint·production build를 실행한다. 첫 원격 실행 결과는 workflow가 push된 뒤 GitHub Actions 기록으로 확정한다.
+
+| 상태 | 시나리오 | 현재 증거와 남은 범위 |
+|---|---|---|
+| 자동화 | SYS-01 | 승인 없는 실행 거부 (`test_execution_without_approval_is_rejected`) |
+| 자동화 | SYS-02 | 다른 proposal version의 승인 재사용 거부 (`test_approval_for_another_version_does_not_authorise`) |
+| 자동화 | SYS-11 | 동일 실행 키의 다른 payload 거부 (`test_same_key_with_different_payload_is_rejected`) |
+| 자동화 | SYS-13 | 거절된 승인으로 실행 차단 (`test_execution_with_rejected_approval_is_blocked`) |
+| 자동화 | SYS-16 | 결과 불명을 성공·실패로 단정하지 않고 원장으로 해소 (`test_mark_outcome_unknown_does_not_claim_success_or_failure`, `test_resolve_outcome_finds_a_committed_execution`) |
+| 자동화 | SYS-17b | 권한 없는 운영자 거부 및 요청 본문의 승인자 위조 무시 (`test_operator_without_permission_is_refused`, `test_approver_id_comes_from_the_server_not_the_body`) |
+| 부분 자동화 | SYS-03 | 순차 재시도와 중복 원장 방지는 검증. 동일 실행 키의 실제 동시 API 요청은 미검증 |
+| 부분 자동화 | SYS-05a | 미처리 수량 초과 거부는 검증. 별도 키 동시 요청 조합은 미검증 |
+| 부분 자동화 | SYS-07 | 타 임직원 자산의 proposal·execution 차단은 검증. 조회 API의 데이터 비노출은 미검증 |
+| 부분 자동화 | SYS-09 | 행 잠금의 대기 동작은 검증. 재고 1개에 대한 두 execution의 통합 경합 테스트는 미검증 |
+| 부분 자동화 | SYS-10 | 잠금 후 수량 재검증은 검증. 승인 후 재고 소진 시나리오의 통합 테스트는 미검증 |
+| 부분 자동화 | SYS-14 | 귀책 주제의 `escalate` 라우팅은 검증. 비용 원장 경로는 MVP에서 제공하지 않음 |
+| 부분 자동화 | SYS-15 | 인용 정책 버전이 사라진 경우 실행 차단은 검증. 정책 변경 후 재승인 전체 흐름은 미검증 |
+| 부분 자동화 | SYS-17a | 인증 헤더가 없으면 API dependency에서 거부됨. 거부 감사 기록까지의 전용 테스트는 미검증 |
+| 수동 검증 | SYS-18 일부 | 성공 실행의 노드별 지연·모델·토큰·비용을 관측 화면에서 확인. 실패 실행 trace의 자동 검증은 미구현 |
+| 미검증 | SYS-04, SYS-06 | 응답 유실 또는 서버 재시작을 포함한 복구 테스트 필요 |
+| 미검증 | SYS-05b | 비용 청구 실행 경로는 MVP 범위 밖이며 API로 노출하지 않음 |
+| 미검증 | SYS-08a, SYS-08b | 요청문·검색 문서의 prompt injection 전용 회귀 테스트 필요 |
+| 미검증 | SYS-12 | commit 전 DB 오류 주입과 재시도 rollback 테스트 필요 |
+
+이 상태표가 현재 구현 증거의 기준이다. 아래 목표 시나리오의 기대 결과가 정의됐다는 사실을 테스트 통과로 간주하지 않는다.
 
 | 검증 ID | 연결 업무 | 입력/실행 조건 | 기대 결과·확인할 증거 | 최소 범위 |
 |---|---|---|---|---|

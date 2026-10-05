@@ -1,5 +1,7 @@
 # AssetFlow
 
+[![AssetFlow Quality Gate](https://github.com/KatherineJH/portfolio_2026/actions/workflows/assetflow-quality.yml/badge.svg)](https://github.com/KatherineJH/portfolio_2026/actions/workflows/assetflow-quality.yml)
+
 AssetFlow is an evidence-based workflow for internal IT asset requests. Employees describe a replacement request in natural language, the service checks assignment and inspection facts, retrieves relevant policy, and creates a bounded action proposal. An authorized IT operator must approve that proposal before the system can register a simulated dispatch.
 
 The project demonstrates an agentic workflow rather than an unrestricted chatbot. The LLM extracts a target asset, quantity, and liability topic; ordinary Python code and PostgreSQL remain authoritative for routing, authorization, inventory, approvals, and execution.
@@ -147,6 +149,8 @@ Open `http://localhost:5173`. Vite proxies `/api` to `http://127.0.0.1:8005`.
 
 ## Verification
 
+The repository includes an [AssetFlow Quality Gate](../.github/workflows/assetflow-quality.yml) that runs on changes under `assetflow/**`. It executes the backend test suite in a pgvector Testcontainer and runs frontend lint plus the production build. See [Operations Evidence](docs/OPERATIONS-EVIDENCE.md) for the distinction between automated, local, manual, and not-yet-verified evidence.
+
 Backend tests use an isolated pgvector PostgreSQL through Testcontainers, not the demo database.
 
 ```powershell
@@ -184,6 +188,7 @@ Manual end-to-end verification covered:
 - [`docs/SCHEMA.md`](docs/SCHEMA.md) — schema and transaction design
 - [`docs/EVALUATION.md`](docs/EVALUATION.md) — evaluation protocol
 - [`docs/EVALUATION-RESULTS.md`](docs/EVALUATION-RESULTS.md) — measurements and limitations
+- [`docs/OPERATIONS-EVIDENCE.md`](docs/OPERATIONS-EVIDENCE.md) — CI, local runtime, and deployment evidence
 - [`docs/adr/001-claim-execution.md`](docs/adr/001-claim-execution.md) — approval and execution ADR
 
 ## Limitations

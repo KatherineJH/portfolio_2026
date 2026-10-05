@@ -1,0 +1,86 @@
+name: AssetFlow Quality Gate
+
+on:
+  pull_request:
+    paths:
+      - "assetflow/**"
+      - ".github/workflows/assetflow-quality.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "assetflow/**"
+      - ".github/workflows/assetflow-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assetflow-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    name: Backend · pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: assetflow/ai-service
+    env:
+      DATABASE_URL: postgresql+psycopg://unused:unused@127.0.0.1:5432/unused
+      POSTGRES_PASSWORD: unused
+      OPENAI_API_KEY: test-key-not-used
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v9
+        with:
+          version: "0.12.21"
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: |
+            assetflow/ai-service/requirements.txt
+            assetflow/ai-service/requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: |
+          uv venv --python 3.11
+          uv pip install --python .venv/bin/python \
+            -r requirements.txt \
+            -r requirements-dev.txt
+
+      - name: Run backend quality gate
+        run: .venv/bin/python -m pytest -q
+
+  frontend-quality:
+    name: Frontend · lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: assetflow/frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: assetflow/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend lint
+        run: npm run lint
+
+      - name: Build production frontend
+        run: npm run build
