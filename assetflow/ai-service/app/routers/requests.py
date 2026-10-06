@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import IntegrityError
 
-from app.db import engine, get_conn
+from app.db import DBConn, engine
 from app.deps import current_user
 from app.schemas.requests import IntakeRequest
 from app.services.graph import build_graph
@@ -32,9 +32,9 @@ def _supports_persisted_intake_idempotency(conn: Connection) -> bool:
 @router.post("")
 def intake(
     body: IntakeRequest,
+    conn: DBConn,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     user: dict = Depends(current_user),
-    conn: Connection = Depends(get_conn),
 ):
     """요청문을 받아 워크플로를 돌린다. 처리안까지만 만들고 실행하지 않는다."""
     supports_idempotency = _supports_persisted_intake_idempotency(conn)
@@ -93,7 +93,7 @@ def intake(
 
 
 @router.get("/{request_id}/trace")
-def get_trace(request_id: int, conn: Connection = Depends(get_conn)):
+def get_trace(request_id: int, conn: DBConn):
     """이 요청을 처리한 노드들의 실행 기록.
 
     run_id 는 워크플로 1회 실행을 묶는 키이고 request_id 는 업무 사례를

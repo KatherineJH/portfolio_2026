@@ -1,6 +1,9 @@
 """DB 엔진과 요청별 커넥션."""
 
 from collections.abc import Iterator
+from typing import Annotated
+
+from fastapi import Depends
 from sqlalchemy import Connection, create_engine
 from app.settings import settings
 
@@ -28,3 +31,8 @@ def get_conn() -> Iterator[Connection]:
         tx.commit()
     finally:
         conn.close()
+
+
+# `get_conn`은 yield 뒤에서 커밋하므로 반드시 응답을 보내기 전에 정리되어야 한다.
+# 라우터와 하위 의존성이 같은 선언을 쓰면 FastAPI의 요청별 캐시도 같은 연결을 공유한다.
+DBConn = Annotated[Connection, Depends(get_conn, scope="function")]

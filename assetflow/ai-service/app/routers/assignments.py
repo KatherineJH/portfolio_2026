@@ -1,15 +1,15 @@
 """지급 이력 조회."""
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import Connection, text
+from fastapi import APIRouter
+from sqlalchemy import text
 
-from app.db import get_conn
+from app.db import DBConn
 
 router = APIRouter(tags=["assignments"])
 
 
 @router.get("/employees/{employee_id}/assignments")
-def list_assignments(employee_id: int, conn: Connection = Depends(get_conn)):
+def list_assignments(employee_id: int, conn: DBConn):
     """이 임직원이 무엇을 몇 개 받았고 몇 개가 미처리인지.
 
     inspection 이 'confirmed_faulty' 면 담당자 점검에서 고장이 확인된 것이다.

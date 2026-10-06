@@ -232,19 +232,11 @@ def resolve_outcome(conn: Connection, *, execution_key: str) -> str:
 
     호출한 쪽이 응답을 받지 못했을 때 쓴다. 기록이 없으면 실행되지 않은
     것이므로 'not_executed'. 기록이 있으면 그 결과를 그대로 돌려준다.
-    조회 자체가 불가능한 상황은 이 함수가 아니라 호출한 쪽에서
-    outcome_unknown 으로 남긴다.
+    조회 자체가 불가능하면 API가 503과 일시적인 unknown 응답을 돌려준다.
+    같은 PostgreSQL에 상태를 따로 기록하려 해도 장애 중에는 기록할 수 없다.
     """
     row = conn.execute(text(
         "SELECT outcome FROM request_execution WHERE execution_key = :key"
     ), {"key": execution_key}).one_or_none()
 
     return row.outcome if row is not None else "not_executed"
-
-
-def mark_outcome_unknown(conn: Connection, *, request_id: int) -> None:
-    """실행 결과를 확인할 수 없을 때 사람이 확인하도록 남긴다."""
-    conn.execute(text(
-        "UPDATE request SET state = 'outcome_unknown', updated_at = now() "
-        "WHERE id = :id"
-    ), {"id": request_id})

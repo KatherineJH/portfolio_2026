@@ -4,9 +4,9 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from sqlalchemy import Connection, text
+from sqlalchemy import text
 
-from app.db import get_conn
+from app.db import DBConn
 from app.deps import current_user
 from app.schemas.proposals import ApprovalRequest, ReleaseRequest, ReReviewRequest
 from app.services.approval import ApprovalInputError, decide_proposal
@@ -21,8 +21,8 @@ PENDING_STATES = {"awaiting_approval", "ready_to_execute"}
 
 @router.get("/pending")
 def list_pending(
+    conn: DBConn,
     state: str = "awaiting_approval",
-    conn: Connection = Depends(get_conn),
 ):
     """상태별 처리안 목록. 판단에 필요한 사실을 함께 돌려준다."""
     if state not in PENDING_STATES:
@@ -56,8 +56,8 @@ REFUSAL_STATUS = {"no_permission": 403}
 def decide(
     proposal_id: int,
     body: ApprovalRequest,
+    conn: DBConn,
     user: dict = Depends(current_user),
-    conn: Connection = Depends(get_conn),
 ):
     """승인은 '지금 저장된 그 처리안'에 결속되고, 승인하면 그 수량을 예약한다.
 
@@ -87,8 +87,8 @@ def decide(
 def release_proposal(
     proposal_id: int,
     body: ReleaseRequest,
+    conn: DBConn,
     user: dict = Depends(current_user),
-    conn: Connection = Depends(get_conn),
 ):
     """아직 실행되지 않은 예약을 풀고 그 예약에 연결된 승인을 철회한다.
 
@@ -113,8 +113,8 @@ def release_proposal(
 def re_review(
     proposal_id: int,
     body: ReReviewRequest,
+    conn: DBConn,
     user: dict = Depends(current_user),
-    conn: Connection = Depends(get_conn),
 ):
     """needs_review 에 머문 요청을 같은 처리안으로 다시 승인 대기로 돌린다.
 

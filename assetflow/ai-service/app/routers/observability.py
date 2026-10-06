@@ -2,16 +2,16 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import Connection, text
+from fastapi import APIRouter
+from sqlalchemy import text
 
-from app.db import get_conn
+from app.db import DBConn
 
 router = APIRouter(prefix="/observability", tags=["observability"])
 
 
 @router.get("/runs")
-def list_runs(limit: int = 20, conn: Connection = Depends(get_conn)):
+def list_runs(conn: DBConn, limit: int = 20):
     """최근 실행을 run_id 단위로 요약한다."""
     safe_limit = min(max(limit, 1), 100)
     rows = conn.execute(text(
@@ -32,7 +32,7 @@ def list_runs(limit: int = 20, conn: Connection = Depends(get_conn)):
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: UUID, conn: Connection = Depends(get_conn)):
+def get_run(run_id: UUID, conn: DBConn):
     """한 실행의 노드를 시간 순서로 돌려준다."""
     rows = conn.execute(text(
         "SELECT node_name, attempt_no, started_at, ended_at, latency_ms, "

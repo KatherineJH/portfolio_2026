@@ -3,7 +3,6 @@ from sqlalchemy import text
 from app.services.execution import (
     ExecutionRejected,
     execute_replacement,
-    mark_outcome_unknown,
     resolve_outcome,
 )
 
@@ -324,16 +323,3 @@ def test_resolve_outcome_finds_a_committed_execution(conn, replacement_case):
 
     assert resolve_outcome(conn, execution_key="k-1") == "registered"
     assert resolve_outcome(conn, execution_key="k-없는키") == "not_executed"
-
-
-def test_mark_outcome_unknown_does_not_claim_success_or_failure(conn, replacement_case):
-    """SYS-16: 확인 불가일 때 성공도 실패도 단정하지 않는다."""
-    mark_outcome_unknown(conn, request_id=replacement_case["request_id"])
-
-    state = conn.execute(text(
-        "SELECT state FROM request WHERE id = :id"
-    ), {"id": replacement_case["request_id"]}).scalar_one()
-    executions = conn.execute(text("SELECT count(*) FROM request_execution")).scalar_one()
-
-    assert state == "outcome_unknown"
-    assert executions == 0

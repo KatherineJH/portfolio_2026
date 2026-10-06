@@ -28,6 +28,8 @@ AssetFlow is a simulated internal IT asset request workflow (domain changed 2026
 - No stock is reserved during approval waiting. An accepted replacement creates a committed allocation for the simulated dispatch. It is not physical handover. Expiry/cancellation of accepted allocations is outside the minimum demo; such cases require operator handling.
 - A timeout after commit is resolved by looking up execution_key. No second mutation is issued with a new key. A transaction rolled back before commit can be retried under the same key after validation. Unreachable DB means outcome unknown, not success or definite failure.
 - Approval rejection creates no dispatch record. Workflow states include needs_information, needs_review, awaiting_approval, rejected, ready_to_execute, outcome_unknown and registered. Graph state is synchronized from the business outcome rather than treated as proof of execution.
+
+Update from ADR-002 step 6: new code no longer writes `outcome_unknown`. A database outage cannot be recorded in that same database, so the API returns a temporary unknown response and reconciles through the execution ledger after connectivity returns. The enum value remains only for existing rows and migration compatibility.
 - Cost claims remain a proposal/escalation path in minimum scope. No simulated claim-ledger writes are exposed until liability and timing policies are accepted and SYS-05b passes. Requests must not be marked charged merely because a proposal exists.
 
 ## Open business policy decisions
@@ -37,4 +39,3 @@ Replacement cycle, inspection acceptance, damage liability and claim timing rema
 ## Acceptance gate and consequences
 
 Review these choices before schema finalization. Record Accepted only after agreement, not because this draft was written. Map each invariant to TRACEABILITY.md. The single-transaction result does not demonstrate cross-service exactly-once execution. Future real integrations require a separate ADR for outbox/reconciliation and provider idempotency.
-
