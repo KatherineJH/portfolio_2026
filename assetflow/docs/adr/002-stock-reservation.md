@@ -41,8 +41,16 @@ Found by reading the code. Items marked "not run" have not been exercised.
    - Both must be sufficient.
 2. **Insufficient quantity.** If the reservable quantity is not enough, no approval is created and the request moves to `needs_review`. This is an intended business outcome and is committed. The API returns an explicit result object with HTTP status 409. It does not raise `HTTPException`, and it commits the `needs_review` transition and the audit record of the refusal in the same transaction. Committing and then raising a separate exception is rejected because the transaction boundary becomes hard to follow.
 3. **Missing approval permission.** In the approval endpoint, a user without approval permission gets an explicit result object with HTTP status 403. The denial audit record is committed in the same call. It is not raised as `HTTPException`, which would roll the audit record back. The same rule applies to the new release and re-review actions. Denial audit records in the execution path are outside this record.
-4. **Reservation table.** Reservations live in a separate `stock_reservation` table with states `held`, `consumed` and `released`. Each row stores the request, the proposal (`proposal_id`, a foreign key to the actual proposal), the proposal version, the payload digest, the assignment item, the asset model and the quantity. Only `held` rows reduce the reservable quantities. History stays in the table.
-5. **Column meaning.** `asset_stock.available_qty` is renamed to `on_hand_qty`. Only a committed execution decreases it. Reservations never change it.
+4. **Reservation table.** Reservations live in a separate `stock_reservation` table with states `held`, `consumed` and `released`. Only `held` rows reduce the reservable quantities. History stays in the table. The database, not only the application, keeps each row consistent with the records it points to:
+   - `approval_id` is `NOT NULL`, `UNIQUE` and references the approval that created the reservation. The reservation's request, proposal, proposal version and payload digest must equal those of that approval (composite foreign key). The approval must be an `approve` decision (a constant `approval_decision` column checked to be `'approve'` and included in the composite key). A reservation is created with the id returned by the approval insert in the same transaction, so a failed reservation rolls the approval back.
+   - `(proposal_id, request_id, proposal_version)` must match a real proposal (composite foreign key to a new `UNIQUE (id, request_id, version)` on `proposal`).
+   - `(assignment_item_id, asset_model_id)` must match a real assignment item (composite foreign key to a new `UNIQUE (id, asset_model_id)` on `assignment_item`), and `asset_model_id` must have a stock row.
+   - `execution_key` is nullable, `UNIQUE`, and references `request_execution` together with `request_id` and `proposal_version` (new `UNIQUE (execution_key, request_id, proposal_version)` on `request_execution`).
+   - One `CHECK` allows exactly three shapes: `held` with `resolved_at IS NULL` and `execution_key IS NULL`; `released` with `resolved_at IS NOT NULL` and `execution_key IS NULL`; `consumed` with `resolved_at IS NOT NULL` and `execution_key IS NOT NULL`.
+   - `qty > 0`.
+
+   What the database cannot enforce stays with the application and its tests: that a reservation's item and quantity equal the proposal payload, and that a reservation is released when its approval is revoked.
+5. **Column meaning.** `asset_stock.available_qty` is renamed to `on_hand_qty`, and its check constraint `stock_not_negative` is renamed to `on_hand_qty_not_negative`. The downgrade restores both original names. Only a committed execution decreases `on_hand_qty`. Reservations never change it.
 6. **Execution consumes a reservation.** Execution does not compete for free quantity. It converts the reservation that belongs to the request from `held` to `consumed`. It must check that the reservation belongs to this request, that its `proposal_id`, version and digest all equal those of the current approved proposal, that it is `held`, that its item and quantity equal the executed item and quantity, and that `on_hand_qty` is not lower than the reserved quantity. Execution must refuse when no `held` reservation exists even if an approval record exists. Its approval lookup must ignore revoked approvals (decision 8). On success, one transaction does all of: reservation `held` to `consumed`, `on_hand_qty` decrease, `allocated_qty` increase, dispatch record, execution outcome.
 7. **Unknown outcome.** A lost response alone does not justify a compensating change or a re-execution. If the database can be queried, the execution key shows whether the transaction committed and what state the reservation is in: committed means `consumed`, rolled back means `held`. If the database cannot be reached, the caller treats the result as unknown and neither guesses nor changes any state. When the connection is back, the outcome is reconciled with the execution key, and only then is the request marked `outcome_unknown` if that is still needed. `mark_outcome_unknown()` and `resolve_outcome()` are not connected to any API path today. Connecting them and testing that path is part of the implementation and verification scope of this record.
 8. **Release and revoke.** There is no automatic expiry. A minimum manual release action is implemented:
@@ -65,7 +73,8 @@ Found by reading the code. Items marked "not run" have not been exercised.
    The state change and the audit record commit in one transaction, and repeating the call causes no second state change. Both a request that became `needs_review` because of insufficient quantity and a request released by decision 8 can return this way. Changing the content of a proposal needs a new version and is not supported here.
 10. **Approval guard and indexes.** Approval is allowed only when the request is `awaiting_approval`. A proposal that already has an active approval or a live reservation cannot be approved again. The check is made after the request row is locked, so two simultaneous approvals cannot both pass it. The database enforces it too:
     - the existing `one_active_approval_per_proposal` index is replaced by a partial unique index on active approvals only (`decision = 'approve' AND revoked_at IS NULL`), at most one per proposal;
-    - a partial unique index on `stock_reservation (request_id, proposal_version)` for rows in `held` or `consumed` allows at most one live reservation.
+    - a second partial unique index `one_active_approval_per_request` on `approval (request_id)` with the same predicate allows at most one active approval per request, even across different proposals. It makes the per-proposal index redundant in effect, and both are kept so each rule is stated explicitly;
+    - a partial unique index `one_live_reservation_per_request` on `stock_reservation (request_id)` for rows in `held` or `consumed` allows at most one live reservation per request. A key on `(request_id, proposal_version)` would let two versions of one request each hold a reservation. A future proposal replacement must release the old reservation in the same transaction before creating the new one, which is compatible with this index.
 11. **Lock order.** Every transaction that touches these tables takes locks in this order, skipping the ones it does not need:
     `request` -> `assignment_item` -> `asset_stock` -> `stock_reservation`.
     - Approval locks the request row first, checks the state, then locks the item and the stock row, computes the reservable quantities, and inserts the reservation.
@@ -97,6 +106,8 @@ Existing data:
 
 - The development seed creates no requests, proposals or approvals, so there is nothing to back-fill there.
 - For any existing real database, query the approvals that can still be executed before the migration: `decision = 'approve'`, the request state is `ready_to_execute` or `outcome_unknown`, and there is no row in `request_execution` for it. If there are none, nothing is back-filled. If there are some, the migration stops and they are handled explicitly. A reservation is never guessed.
+- The same pre-check also stops the migration if any request has more than one `approve` row, because the new per-request index could not be created. The pre-check runs inside the migration transaction, so a failure leaves the schema and `alembic_version` unchanged.
+- The downgrade is supported only while no reservation and no revoked approval exists. It refuses otherwise and does not claim to restore data.
 - Requests that are already `registered` are not back-filled. No reservation is created for an execution that has already happened.
 - `outcome_unknown` is included because such a request can still be resolved to an executable state.
 - The new `revoked_*` columns are nullable, so existing approval rows stay active.
@@ -106,7 +117,7 @@ Impact of the column rename (`available_qty` to `on_hand_qty`), found by search:
 - Code: `services/execution.py` (2 places), `routers/proposals.py` (1), `services/nodes.py` (1), `seed_dev.py`, `demo.py`.
 - Migration: a new migration renames the column. The original migration is not edited.
 - Tests: `tests/test_execution.py` (3 places).
-- Documents: `SCHEMA.md`, `SCHEMA-ERD.md`, `FLOW.md`.
+- Documents: `SCHEMA.md`, `SCHEMA-ERD.md`, `FLOW.md`. The constraint name `stock_not_negative` appears in `SCHEMA.md` (3 places) and `SCHEMA-ERD.md` and must become `on_hand_qty_not_negative`.
 - The pending-proposals response changes shape (decision 12), so the frontend type changes too.
 
 Impact on tests, by search of the test files, to be confirmed with the full test list before implementation:
@@ -141,7 +152,9 @@ These become binding when this record is accepted. Until then they are part of t
 - Per asset model, the sum of `held` reservations never exceeds `on_hand_qty`.
 - Per assignment item, `allocated_qty` plus the sum of `held` reservations never exceeds `qty`.
 - An approval and its reservation commit together or roll back together.
-- A proposal has at most one active approval (not revoked), and a currently approved proposal has exactly one live reservation. The database refuses a second of either.
+- A request has at most one active approval (not revoked) and at most one live reservation (`held` or `consumed`), even across different proposals. The database refuses a second of either.
+- A reservation points to exactly one approval, which must be an `approve` decision with the same request, proposal, proposal version and digest. A consumed reservation points to a real execution of the same request and proposal version, and an execution key belongs to at most one reservation.
+- A reservation's status, `resolved_at` and `execution_key` take only the three allowed combinations.
 - A revoked approval cannot authorize an execution.
 - A reservation records `proposal_id`, version, digest, item, model and quantity. These all match the current proposal and the execution input at execution time, and execution without a `held` reservation is refused.
 - Only `held` to `consumed` and `held` to `released` are allowed, and `consumed` and `released` are final.
