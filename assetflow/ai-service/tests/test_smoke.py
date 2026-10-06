@@ -8,4 +8,4 @@ def test_migrations_applied_to_test_database(conn):
             "WHERE table_schema='public' AND table_name<>'alembic_version'"
         )
     ).scalar_one()
-    assert count == 15
+    assert count == 16

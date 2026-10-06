@@ -93,7 +93,7 @@ def load_assignments(conn: Connection, state: RequestState) -> dict:
         "SELECT ai.id, m.code, m.name, ai.qty, ai.allocated_qty, "
         "       ai.qty - ai.allocated_qty AS remaining, "
         "       COALESCE(i.status::text, 'pending') AS inspection, "
-        "       COALESCE(s.available_qty, 0) AS stock "
+        "       COALESCE(s.on_hand_qty, 0) AS stock "
         "FROM assignment_item ai "
         "JOIN assignment a ON a.id = ai.assignment_id "
         "JOIN asset_model m ON m.id = ai.asset_model_id "

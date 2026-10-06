@@ -19,7 +19,7 @@ def replacement_case(conn):
         "VALUES ('DOCK-01', 'Dock', 'PERIPHERAL')"
     ))
     conn.execute(text(
-        "INSERT INTO asset_stock (asset_model_id, available_qty) "
+        "INSERT INTO asset_stock (asset_model_id, on_hand_qty) "
         "VALUES ((SELECT max(id) FROM asset_model), 5)"
     ))
     conn.execute(text(
@@ -78,7 +78,7 @@ def test_replacement_allocates_and_registers(conn, replacement_case):
     allocated = conn.execute(text(
         "SELECT allocated_qty FROM assignment_item WHERE id = :id"
     ), {"id": replacement_case["item_id"]}).scalar_one()
-    stock = conn.execute(text("SELECT available_qty FROM asset_stock")).scalar_one()
+    stock = conn.execute(text("SELECT on_hand_qty FROM asset_stock")).scalar_one()
     dispatches = conn.execute(text("SELECT count(*) FROM simulated_dispatch")).scalar_one()
     state = conn.execute(text(
         "SELECT state FROM request WHERE id = :id"
@@ -128,7 +128,7 @@ def test_retry_with_same_key_does_not_allocate_twice(conn, replacement_case):
     allocated = conn.execute(text(
         "SELECT allocated_qty FROM assignment_item WHERE id = :id"
     ), {"id": replacement_case["item_id"]}).scalar_one()
-    stock = conn.execute(text("SELECT available_qty FROM asset_stock")).scalar_one()
+    stock = conn.execute(text("SELECT on_hand_qty FROM asset_stock")).scalar_one()
     dispatches = conn.execute(text("SELECT count(*) FROM simulated_dispatch")).scalar_one()
 
     assert allocated == 1

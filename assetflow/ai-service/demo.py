@@ -40,7 +40,7 @@ def show(obj) -> None:
 def stock_of(code: str) -> int:
     with engine.begin() as conn:
         return conn.execute(text(
-            "SELECT s.available_qty FROM asset_stock s "
+            "SELECT s.on_hand_qty FROM asset_stock s "
             "JOIN asset_model m ON m.id = s.asset_model_id WHERE m.code = :code"
         ), {"code": code}).scalar_one()
 

@@ -28,7 +28,7 @@ def list_pending(
         "       u.display_name AS requester, "
         "       m.code AS asset_code, m.name AS asset_name, "
         "       ai.qty, ai.allocated_qty, ai.qty - ai.allocated_qty AS remaining, "
-        "       s.available_qty AS stock "
+        "       s.on_hand_qty AS stock "
         "FROM proposal p "
         "JOIN request r ON r.id = p.request_id "
         "JOIN app_user u ON u.id = r.employee_id "

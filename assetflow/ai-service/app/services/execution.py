@@ -90,7 +90,7 @@ def execute_replacement(
     ), {"id": assignment_item_id}).one()
 
     stock = conn.execute(text(
-        "SELECT available_qty FROM asset_stock "
+        "SELECT on_hand_qty FROM asset_stock "
         "WHERE asset_model_id = :model FOR UPDATE"
     ), {"model": item.asset_model_id}).scalar_one()
 
@@ -105,7 +105,7 @@ def execute_replacement(
         "UPDATE assignment_item SET allocated_qty = allocated_qty + :qty WHERE id = :id"
     ), {"qty": qty, "id": assignment_item_id})
     conn.execute(text(
-        "UPDATE asset_stock SET available_qty = available_qty - :qty "
+        "UPDATE asset_stock SET on_hand_qty = on_hand_qty - :qty "
         "WHERE asset_model_id = :model"
     ), {"qty": qty, "model": item.asset_model_id})
 
