@@ -137,12 +137,12 @@
           <ol class="gate-list">
             <li><span class="gate-number">01</span><div><h3>Evidence Gate</h3><p>지급 관계·점검 상태·재고와 검색된 정책을 분리해 조회합니다. 근거가 부족하면 처리안을 만들지 않습니다.</p></div><small>RAG · target verification</small></li>
             <li><span class="gate-number">02</span><div><h3>Decision Gate</h3><p>모델 출력은 작은 사실 집합으로 제한하고, 결정적 규칙이 need_info·need_review·escalate·propose 경로를 선택합니다.</p></div><small>bounded output · server rules</small></li>
-            <li><span class="gate-number">03</span><div><h3>Approval Gate</h3><p>승인 권한은 DB에서 확인하며 승인 결과를 처리안 버전과 payload digest에 결속합니다.</p></div><small>authorization · version binding</small></li>
-            <li><span class="gate-number">04</span><div><h3>Execution Gate</h3><p>실행 직전에 자산 소유, 승인, 규정 버전, 미처리 수량과 재고를 잠근 뒤 다시 검사합니다.</p></div><small>idempotency · row lock</small></li>
+            <li><span class="gate-number">03</span><div><h3>Approval Gate</h3><p>승인 권한을 DB에서 확인하고 처리안 버전·digest에 결속된 재고와 지급 수량을 함께 예약합니다.</p></div><small>authorization · reservation</small></li>
+            <li><span class="gate-number">04</span><div><h3>Execution Gate</h3><p>승인에 연결된 예약과 자산 소유, 규정 버전, 실제 보유량을 잠근 뒤 다시 검사하고 원자적으로 소비합니다.</p></div><small>idempotency · row lock</small></li>
           </ol>
 
           <div class="test-band">
-            <div><p class="eyebrow">AUTOMATED EVIDENCE</p><h3>47 passed · 0 failed</h3><p>API, 권한, 제약조건, 동시성, 실행 트랜잭션, 그래프 라우팅과 대상 검증을 자동화했습니다. GitHub Actions가 백엔드 테스트와 프런트엔드 lint·build를 각각 검사하도록 구성했습니다.</p></div>
+            <div><p class="eyebrow">AUTOMATED EVIDENCE</p><h3>262 passed · 0 failed</h3><p>API, 권한, 예약·해제·재검토, 제약조건, 동시성, 실행 트랜잭션, 그래프 라우팅과 대상 검증을 자동화했습니다. 현재 브랜치는 로컬 검증 완료 상태이며 CI 결과는 PR 또는 workflow 실행 후 별도로 확인합니다.</p></div>
             <div class="test-tags" aria-label="테스트 범주"><span>Authorization</span><span>Idempotency</span><span>Concurrency</span><span>Transaction</span><span>Routing</span><span>Target verification</span></div>
           </div>
         </div>

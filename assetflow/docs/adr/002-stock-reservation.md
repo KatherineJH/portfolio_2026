@@ -1,9 +1,9 @@
 # 002. Reserve quantity when a proposal is approved
 
 Date: 2026-10-06
-Status: Accepted, implementation pending (2026-10-06). Nothing is implemented yet. This record supersedes only the inventory decision of [ADR-001](001-claim-execution.md). Until it is implemented, the code still follows ADR-001. The status changes to "Accepted, implemented and verified" only after the code and the tests listed under Invariants are complete.
+Status: Accepted, implemented and locally verified (2026-10-06). This record supersedes only the inventory decision of [ADR-001](001-claim-execution.md). The server-issued execution key, PostgreSQL authority, and single application/database transaction boundary from ADR-001 remain in force.
 
-Scope rule: the reservation feature is built as one complete vertical change (schema and migration, reservation on approval, approval guard, consumption on execution, release and revoke, re-review, quantity fields in the API, minimal approval screen change, tests, schema and flow documents). If it cannot be finished and verified, none of it is shipped, and the current implementation is submitted. The record then stays "Accepted, implementation pending" and is described as an unimplemented design decision, not as a feature.
+Implementation note: the vertical change is complete in the feature branch: schema and migration, reservation on approval, approval guard, consumption on execution, release and revoke, re-review, outcome lookup, quantity fields and operator UI, automated tests, Docker E2E, and documentation. Current-branch CI remains unverified until the branch is pushed and GitHub Actions succeeds.
 
 ## Context
 
@@ -22,13 +22,13 @@ The data stays consistent, but an operator who approved a request sees an approv
 
 ### Verified facts about the current code (2026-10-06)
 
-Found by reading the code. Items marked "not run" have not been exercised.
+Pre-implementation facts recorded when this ADR was drafted. They explain the change and do not describe the current code. Items marked "not run" were code-reading findings at that time.
 
 - `graph.py` writes every proposal with `version = 1`. No code path creates version 2. Version binding exists in the schema and in the execution check, but no workflow produces a second version.
 - The approval endpoint (`routers/proposals.py`) does not touch stock or the assignment item. It does not check the current state of the request and sets `request.state` unconditionally, so approving or rejecting a `registered` request would overwrite its state (not run).
 - The execution transaction locks `assignment_item`, then `asset_stock`. It never locks the `request` row explicitly; the row is locked only by the `UPDATE request` near the end. Its approval lookup expects at most one approving row (`one_or_none`).
 - `get_conn` rolls back the whole transaction on any exception. A refusal that raises `HTTPException` discards earlier writes in the same request, including the `audit_log` denial rows written in the approval and execution paths (not run).
-- `asset_stock.available_qty` is the quantity that can be executed now. Because nothing is reserved, it also equals the quantity on hand.
+- Before this ADR, `asset_stock.available_qty` represented both executable quantity and quantity on hand. The migration renamed it to `on_hand_qty`; reservable quantity is now computed by subtracting `held` reservations.
 - `resolve_outcome()` exists in `services/execution.py`; step 6 exposes it through an operator-only status endpoint. The earlier `mark_outcome_unknown()` helper was removed because an unavailable database cannot persist that state.
 - A request can reach `needs_review` through the graph (for example pending inspection) without having a proposal.
 - The development seed creates models, stock, employees, assignments, inspections and policies. It creates no requests, proposals or approvals.
@@ -86,8 +86,9 @@ Found by reading the code. Items marked "not run" have not been exercised.
     - Execution is changed to lock the request row first, then the item and the stock row as it does today, then the reservation row.
     - Release and re-review lock the request row, then the reservation row.
 13. **What the operator sees.** The pending-proposals response separates the quantities and the approval screen shows the reservable ones by default:
-    - stock: `on_hand_qty`, `held_qty` (other active reservations), `reservable_qty`;
-    - assignment item: `remaining_qty`, `held_item_qty`, `reservable_item_qty`.
+    - stock: `on_hand_qty`, `held_stock_qty` (all active held reservations), `reservable_stock_qty`;
+    - assignment item: `remaining_item_qty`, `held_item_qty`, `reservable_item_qty`;
+    - the proposal's latest reservation: `reservation_status`, `reservation_qty`.
 14. **Scope of supersession.** Only the inventory decision of ADR-001. The server-issued execution key, PostgreSQL as the business ledger and the single transaction boundary remain in force.
 
 ### Why this lock order
@@ -117,19 +118,12 @@ Existing data:
 - `outcome_unknown` is included because such a request can still be resolved to an executable state.
 - The new `revoked_*` columns are nullable, so existing approval rows stay active.
 
-Impact of the column rename (`available_qty` to `on_hand_qty`), found by search:
+Implemented impact:
 
-- Code: `services/execution.py` (2 places), `routers/proposals.py` (1), `services/nodes.py` (1), `seed_dev.py`, `demo.py`.
-- Migration: a new migration renames the column. The original migration is not edited.
-- Tests: `tests/test_execution.py` (3 places).
-- Documents: `SCHEMA.md`, `SCHEMA-ERD.md`, `FLOW.md`. The constraint name `stock_not_negative` appears in `SCHEMA.md` (3 places) and `SCHEMA-ERD.md` and must become `on_hand_qty_not_negative`.
-- The pending-proposals response changes shape (decision 12), so the frontend type changes too.
-
-Impact on tests, by search of the test files, to be confirmed with the full test list before implementation:
-
-- Likely to change: `tests/test_execution.py` (14 tests, shared `replacement_case` fixture inserts the approval, proposal, request and stock), `tests/test_api.py` (2 tests, `approval_case` fixture), the approval-related tests in `tests/test_constraints.py` (2 of 8), and the `proposal_ids` fixture in `tests/conftest.py`.
-- No reference to approval or stock: `test_graph.py`, `test_target_verification.py`, `test_concurrency.py`, `test_smoke.py`. Not expected to change.
-- The statement "all 47 tests must change" is not supported.
+- Migration `19e6a6ac7866` performs the pre-check, column and constraint rename, revocation fields, reservation table, foreign keys, and partial indexes atomically.
+- Application and seed queries now use `on_hand_qty`; pending-proposal responses expose the separated reservation quantities from decision 13.
+- Approval, execution, release, re-review, transaction-boundary, schema, and concurrency tests cover the new paths. The full suite contains 262 tests; the 24 concurrency tests passed three consecutive runs on 2026-10-06.
+- `SCHEMA.md`, `SCHEMA-ERD.md`, `FLOW.md`, `TRACEABILITY.md`, README, and operations evidence were reconciled after implementation.
 
 ## Alternatives considered
 
@@ -152,7 +146,7 @@ Impact on tests, by search of the test files, to be confirmed with the full test
 
 ## Invariants
 
-These become binding when this record is accepted. Until then they are part of the draft.
+These invariants are binding for the implemented reservation workflow.
 
 - Per asset model, the sum of `held` reservations never exceeds `on_hand_qty`.
 - Per assignment item, `allocated_qty` plus the sum of `held` reservations never exceeds `qty`.
