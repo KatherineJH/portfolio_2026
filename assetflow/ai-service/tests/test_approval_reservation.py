@@ -11,21 +11,11 @@ import pytest
 from sqlalchemy import text
 
 from tests.seed import (
-    add_assignment, add_item, add_user, insert_reservation, revoke, seed_base,
-    seed_pending, seed_request,
+    add_assignment, add_item, add_user, insert_reservation, revoke, rows, scalar,
+    seed_base, seed_pending, seed_request,
 )
 
 # ── 도우미 ──────────────────────────────────────────────────────────
-
-
-def rows(db, sql, **params):
-    with db.engine.connect() as c:
-        return [tuple(r) for r in c.execute(text(sql), params)]
-
-
-def scalar(db, sql, **params):
-    with db.engine.connect() as c:
-        return c.execute(text(sql), params).scalar_one()
 
 
 def snapshot(db):
@@ -187,19 +177,37 @@ def test_requests_sharing_one_assignment_item_cannot_overbook_it(api, head_db):
                    "insufficient_item_quantity")
 
 
-@pytest.mark.parametrize("status", ["consumed", "released"])
-@pytest.mark.parametrize("stock, item_qty", [(10, 2), (2, 10)],
-                         ids=["item-is-tight", "stock-is-tight"])
-def test_only_held_reservations_reduce_what_is_reservable(
-        api, head_db, status, stock, item_qty):
-    """consumed 는 이미 재고와 배분량에 반영됐고 released 는 풀렸다.
+# (상태, 처음 재고, 처음 지급 항목 수량, 시나리오). 새 요청은 2개를 원한다.
+# consumed 는 실행이 끝난 예약이라 재고 2개와 지급량 2개가 이미 반영된 상태를
+# 만든다(재고 4 -> 2, allocated 0 -> 2). released 는 풀렸으니 아무것도 안 바뀐다.
+HELD_ONLY_CASES = [
+    ("consumed", 10, 4, "item-is-tight"),    # 반영 후 남은 지급 수량 4-2 = 2
+    ("consumed", 4, 10, "stock-is-tight"),   # 반영 후 보유 재고 4-2 = 2
+    ("released", 10, 2, "item-is-tight"),    # 남은 지급 수량 2
+    ("released", 2, 10, "stock-is-tight"),   # 보유 재고 2
+]
 
-    한쪽 한도만 빠듯하게 만들어서, 어느 쪽 합계가 잘못 세더라도 드러나게 한다.
+
+@pytest.mark.parametrize("status, stock, item_qty, scenario", HELD_ONLY_CASES,
+                         ids=[f"{c[0]}-{c[3]}" for c in HELD_ONLY_CASES])
+def test_only_held_reservations_reduce_what_is_reservable(
+        api, head_db, status, stock, item_qty, scenario):
+    """held 만 예약 가능량을 줄인다.
+
+    consumed 를 held 처럼 또 세면 이미 반영된 2개를 한 번 더 빼서 새 요청(2개)이
+    거절된다. 한쪽 한도만 빠듯하게 만들어서 어느 합계가 틀려도 드러나게 한다.
     """
     base = world(head_db, stock=stock, item_qty=item_qty)
     with head_db.engine.begin() as c:
         old = seed_request(c, base, state="registered", execution_key="k-old")
         insert_reservation(c, base, old, qty=2, status=status)
+        if status == "consumed":
+            # 실행이 한 일: 지급량 증가와 재고 감소. 예약만 있고 이것이 없는
+            # 상태는 실제로 생길 수 없다.
+            c.execute(text("UPDATE assignment_item SET allocated_qty = allocated_qty + 2 "
+                           "WHERE id = :i"), {"i": base["item_id"]})
+            c.execute(text("UPDATE asset_stock SET on_hand_qty = on_hand_qty - 2 "
+                           "WHERE asset_model_id = :m"), {"m": base["model_id"]})
     req = pending(head_db, base, qty=2)
 
     response = decide(api, req["proposal_id"], base["operator_id"])

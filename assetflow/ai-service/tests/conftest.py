@@ -150,3 +150,23 @@ def api(head_db, monkeypatch):
 
     monkeypatch.setattr(app.db, "engine", head_db.engine)
     yield TestClient(fastapi_app, raise_server_exceptions=False)
+
+
+@pytest.fixture
+def replacement_case(conn):
+    """독 2개 지급 · 0개 처리 · 재고 5개 · 승인된 요청 1건(예약 1개 held). AR-01 상황.
+
+    승인 서비스가 만드는 것과 같은 결과를 직접 만든다(승인 기록, held 예약,
+    ready_to_execute). 실행 테스트가 승인 로직에 기대지 않게 하려는 것이다.
+    """
+    from tests.seed import approve_pending, seed_base, seed_pending
+
+    base = seed_base(conn, stock=5, item_qty=2)
+    approved = approve_pending(conn, base, seed_pending(conn, base, qty=1))
+    return {"base": base, "item_id": base["item_id"],
+            "request_id": approved["request_id"],
+            "proposal_id": approved["proposal_id"],
+            "approval_id": approved["approval_id"],
+            "reservation_id": approved["reservation_id"],
+            "employee_id": base["employee_id"],
+            "operator_id": base["operator_id"]}

@@ -140,6 +140,30 @@ def seed_pending(conn, base: dict, *, state: str = "awaiting_approval",
             "version": 1, "digest": "d1", "item_id": item_id, "qty": qty}
 
 
+def approve_pending(conn, base: dict, pending: dict, *,
+                    qty: int | None = None) -> dict:
+    """승인 서비스가 만드는 것과 같은 결과를 직접 만든다.
+
+    승인 기록, held 예약, ready_to_execute. 서비스를 거치지 않으므로 실행 테스트가
+    승인 로직에 기대지 않는다.
+    """
+    approval_id = _one(
+        conn, "INSERT INTO approval "
+              "(request_id, proposal_id, proposal_version, payload_digest, "
+              " approver_id, decision) "
+              "VALUES (:r, :p, :v, :d, :o, 'approve') RETURNING id",
+        r=pending["request_id"], p=pending["proposal_id"],
+        v=pending["version"], d=pending["digest"], o=base["operator_id"])
+    conn.execute(text(
+        "UPDATE request SET state = 'ready_to_execute', updated_at = now() "
+        "WHERE id = :id"), {"id": pending["request_id"]})
+    approved = {**pending, "approval_id": approval_id, "execution_key": None}
+    reservation_id = insert_reservation(
+        conn, base, approved, qty=qty or pending["qty"],
+        assignment_item_id=pending["item_id"])
+    return {**approved, "reservation_id": reservation_id}
+
+
 def revoke(conn, base: dict, approval_id: int, reason: str = "test") -> None:
     conn.execute(text(
         "UPDATE approval SET revoked_at = now(), revoked_by = :o, "
@@ -185,6 +209,17 @@ def insert_reservation(conn, base: dict, req: dict, **override) -> int:
 
 
 # ── 검사 도우미 ─────────────────────────────────────────────────────
+
+def rows(db, sql: str, **params) -> list[tuple]:
+    """새 연결로 읽는다. 커밋된 것만 보인다."""
+    with db.engine.connect() as c:
+        return [tuple(r) for r in c.execute(text(sql), params)]
+
+
+def scalar(db, sql: str, **params):
+    with db.engine.connect() as c:
+        return c.execute(text(sql), params).scalar_one()
+
 
 def rejected(conn, sql, params=None):
     """제약 위반은 세이브포인트 안에서 확인해 같은 연결로 다음 검사를 이어간다."""
