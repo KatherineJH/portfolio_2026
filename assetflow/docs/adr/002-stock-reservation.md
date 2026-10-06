@@ -41,7 +41,8 @@ Found by reading the code. Items marked "not run" have not been exercised.
    - Both must be sufficient.
 2. **Insufficient quantity.** If the reservable quantity is not enough, no approval is created and the request moves to `needs_review`. This is an intended business outcome and is committed. The API returns an explicit result object with HTTP status 409. It does not raise `HTTPException`, and it commits the `needs_review` transition and the audit record of the refusal in the same transaction. Committing and then raising a separate exception is rejected because the transaction boundary becomes hard to follow.
 3. **Missing approval permission.** In the approval endpoint, a user without approval permission gets an explicit result object with HTTP status 403. The denial audit record is committed in the same call. It is not raised as `HTTPException`, which would roll the audit record back. The same rule applies to the new release and re-review actions. Denial audit records in the execution path are outside this record.
-4. **Reservation table.** Reservations live in a separate `stock_reservation` table with states `held`, `consumed` and `released`. Only `held` rows reduce the reservable quantities. History stays in the table. The database, not only the application, keeps each row consistent with the records it points to:
+4. **Audited refusals and pre-approval checks.** Every refusal made by a business rule writes a `denied` audit record with a `reason_code` and a short detail, and the record is committed. The reason codes are `no_permission`, `not_awaiting_approval`, `already_approved`, `already_reserved`, `invalid_proposal`, `item_not_owned_by_requester`, `insufficient_item_quantity` and `insufficient_stock`. Plain input errors are not audited: an invalid `decision` value, an unknown proposal id, and a body whose `proposal_id` differs from the path (HTTP 400 or 404). Before anything is reserved, the approval checks that the proposal is a replacement (both the `action_type` column and the payload `action` say `replacement`), that the payload names an existing assignment item and a positive integer quantity, and that the item belongs to the employee who made the request. Without the ownership check, a proposal for someone else's item could be approved and reserve stock, and would fail only at execution. When both limits are short, the assignment item limit is reported first.
+5. **Reservation table.** Reservations live in a separate `stock_reservation` table with states `held`, `consumed` and `released`. Only `held` rows reduce the reservable quantities. History stays in the table. The database, not only the application, keeps each row consistent with the records it points to:
    - `approval_id` is `NOT NULL`, `UNIQUE` and references the approval that created the reservation. The reservation's request, proposal, proposal version and payload digest must equal those of that approval (composite foreign key). The approval must be an `approve` decision (a constant `approval_decision` column checked to be `'approve'` and included in the composite key). A reservation is created with the id returned by the approval insert in the same transaction, so a failed reservation rolls the approval back.
    - `(proposal_id, request_id, proposal_version)` must match a real proposal (composite foreign key to a new `UNIQUE (id, request_id, version)` on `proposal`).
    - `(assignment_item_id, asset_model_id)` must match a real assignment item (composite foreign key to a new `UNIQUE (id, asset_model_id)` on `assignment_item`), and `asset_model_id` must have a stock row.
@@ -50,10 +51,10 @@ Found by reading the code. Items marked "not run" have not been exercised.
    - `qty > 0`.
 
    What the database cannot enforce stays with the application and its tests: that a reservation's item and quantity equal the proposal payload, and that a reservation is released when its approval is revoked.
-5. **Column meaning.** `asset_stock.available_qty` is renamed to `on_hand_qty`, and its check constraint `stock_not_negative` is renamed to `on_hand_qty_not_negative`. The downgrade restores both original names. Only a committed execution decreases `on_hand_qty`. Reservations never change it.
-6. **Execution consumes a reservation.** Execution does not compete for free quantity. It converts the reservation that belongs to the request from `held` to `consumed`. It must check that the reservation belongs to this request, that its `proposal_id`, version and digest all equal those of the current approved proposal, that it is `held`, that its item and quantity equal the executed item and quantity, and that `on_hand_qty` is not lower than the reserved quantity. Execution must refuse when no `held` reservation exists even if an approval record exists. Its approval lookup must ignore revoked approvals (decision 8). On success, one transaction does all of: reservation `held` to `consumed`, `on_hand_qty` decrease, `allocated_qty` increase, dispatch record, execution outcome.
-7. **Unknown outcome.** A lost response alone does not justify a compensating change or a re-execution. If the database can be queried, the execution key shows whether the transaction committed and what state the reservation is in: committed means `consumed`, rolled back means `held`. If the database cannot be reached, the caller treats the result as unknown and neither guesses nor changes any state. When the connection is back, the outcome is reconciled with the execution key, and only then is the request marked `outcome_unknown` if that is still needed. `mark_outcome_unknown()` and `resolve_outcome()` are not connected to any API path today. Connecting them and testing that path is part of the implementation and verification scope of this record.
-8. **Release and revoke.** There is no automatic expiry. A minimum manual release action is implemented:
+6. **Column meaning.** `asset_stock.available_qty` is renamed to `on_hand_qty`, and its check constraint `stock_not_negative` is renamed to `on_hand_qty_not_negative`. The downgrade restores both original names. Only a committed execution decreases `on_hand_qty`. Reservations never change it.
+7. **Execution consumes a reservation.** Execution does not compete for free quantity. It converts the reservation that belongs to the request from `held` to `consumed`. It must check that the reservation belongs to this request, that its `proposal_id`, version and digest all equal those of the current approved proposal, that it is `held`, that its item and quantity equal the executed item and quantity, and that `on_hand_qty` is not lower than the reserved quantity. Execution must refuse when no `held` reservation exists even if an approval record exists. Its approval lookup must ignore revoked approvals (decision 9). On success, one transaction does all of: reservation `held` to `consumed`, `on_hand_qty` decrease, `allocated_qty` increase, dispatch record, execution outcome.
+8. **Unknown outcome.** A lost response alone does not justify a compensating change or a re-execution. If the database can be queried, the execution key shows whether the transaction committed and what state the reservation is in: committed means `consumed`, rolled back means `held`. If the database cannot be reached, the caller treats the result as unknown and neither guesses nor changes any state. When the connection is back, the outcome is reconciled with the execution key, and only then is the request marked `outcome_unknown` if that is still needed. `mark_outcome_unknown()` and `resolve_outcome()` are not connected to any API path today. Connecting them and testing that path is part of the implementation and verification scope of this record.
+9. **Release and revoke.** There is no automatic expiry. A minimum manual release action is implemented:
    - requires approval permission;
    - requires a reason;
    - releases only `held` reservations and never `consumed` ones;
@@ -62,7 +63,7 @@ Found by reading the code. Items marked "not run" have not been exercised.
    - in one transaction: sets the reservation to `released`, revokes the approval, sets the request to `needs_review`.
 
    Approval records are never deleted. `approval` gets `revoked_at`, `revoked_by` and `revoke_reason`. An approval is active only if `decision = 'approve'` and `revoked_at IS NULL`.
-9. **Re-review.** An explicit operator action returns a request from `needs_review` to `awaiting_approval`, so the same proposal can be approved again. It requires:
+10. **Re-review.** An explicit operator action returns a request from `needs_review` to `awaiting_approval`, so the same proposal can be approved again. It requires:
    - approval permission and a recorded reason;
    - current state `needs_review`;
    - an existing proposal for the request;
@@ -70,20 +71,20 @@ Found by reading the code. Items marked "not run" have not been exercised.
    - no `consumed` reservation and no row in `request_execution` for the proposal;
    - the proposal has not been replaced.
 
-   The state change and the audit record commit in one transaction, and repeating the call causes no second state change. Both a request that became `needs_review` because of insufficient quantity and a request released by decision 8 can return this way. Changing the content of a proposal needs a new version and is not supported here.
-10. **Approval guard and indexes.** Approval is allowed only when the request is `awaiting_approval`. A proposal that already has an active approval or a live reservation cannot be approved again. The check is made after the request row is locked, so two simultaneous approvals cannot both pass it. The database enforces it too:
+   The state change and the audit record commit in one transaction, and repeating the call causes no second state change. Both a request that became `needs_review` because of insufficient quantity and a request released by decision 9 can return this way. Changing the content of a proposal needs a new version and is not supported here.
+11. **Approval guard and indexes.** Approval is allowed only when the request is `awaiting_approval`. A request that already has an active approval or a live reservation (`held` or `consumed`) can be neither approved nor rejected again; a live reservation without an active approval is inconsistent data, and approving would hit the unique index while rejecting would leave the reservation orphaned. The check is made after the request row is locked, so two simultaneous approvals cannot both pass it. The database enforces it too:
     - the existing `one_active_approval_per_proposal` index is replaced by a partial unique index on active approvals only (`decision = 'approve' AND revoked_at IS NULL`), at most one per proposal;
     - a second partial unique index `one_active_approval_per_request` on `approval (request_id)` with the same predicate allows at most one active approval per request, even across different proposals. It makes the per-proposal index redundant in effect, and both are kept so each rule is stated explicitly;
     - a partial unique index `one_live_reservation_per_request` on `stock_reservation (request_id)` for rows in `held` or `consumed` allows at most one live reservation per request. A key on `(request_id, proposal_version)` would let two versions of one request each hold a reservation. A future proposal replacement must release the old reservation in the same transaction before creating the new one, which is compatible with this index.
-11. **Lock order.** Every transaction that touches these tables takes locks in this order, skipping the ones it does not need:
+12. **Lock order.** Every transaction that touches these tables takes locks in this order, skipping the ones it does not need:
     `request` -> `assignment_item` -> `asset_stock` -> `stock_reservation`.
     - Approval locks the request row first, checks the state, then locks the item and the stock row, computes the reservable quantities, and inserts the reservation.
     - Execution is changed to lock the request row first, then the item and the stock row as it does today, then the reservation row.
     - Release and re-review lock the request row, then the reservation row.
-12. **What the operator sees.** The pending-proposals response separates the quantities and the approval screen shows the reservable ones by default:
+13. **What the operator sees.** The pending-proposals response separates the quantities and the approval screen shows the reservable ones by default:
     - stock: `on_hand_qty`, `held_qty` (other active reservations), `reservable_qty`;
     - assignment item: `remaining_qty`, `held_item_qty`, `reservable_item_qty`.
-13. **Scope of supersession.** Only the inventory decision of ADR-001. The server-issued execution key, PostgreSQL as the business ledger and the single transaction boundary remain in force.
+14. **Scope of supersession.** Only the inventory decision of ADR-001. The server-issued execution key, PostgreSQL as the business ledger and the single transaction boundary remain in force.
 
 ### Why this lock order
 
@@ -98,7 +99,7 @@ The cost is a change to the execution transaction: an explicit lock on the reque
 
 Replacing a proposal with a new version is not part of this implementation. No code path creates a second version today. Before such a path is added, a separate record must decide when the old reservation is released and must require that release and the new reservation happen under the same locks in one transaction.
 
-Denial audit records in the execution path are rolled back by `get_conn` as well (not run, found by reading). They are not fixed by this record and are tracked as a separate work item. Approval-path denials are covered by decisions 2 and 3.
+Denial audit records in the execution path are rolled back by `get_conn` as well (not run, found by reading). They are not fixed by this record and are tracked as a separate work item. Approval-path denials are covered by decisions 2, 3 and 4.
 
 ## Existing data and tests
 
@@ -159,10 +160,10 @@ These become binding when this record is accepted. Until then they are part of t
 - A reservation records `proposal_id`, version, digest, item, model and quantity. These all match the current proposal and the execution input at execution time, and execution without a `held` reservation is refused.
 - Only `held` to `consumed` and `held` to `released` are allowed, and `consumed` and `released` are final.
 - A refused approval for insufficient quantity leaves reservations, stock and allocated quantity unchanged, leaves no approval row, and leaves the request in `needs_review`. The refusal audit record is kept.
-- A refused approval for missing permission changes nothing except that its audit record is kept.
+- A refusal by a business rule (missing permission, wrong request state, active approval already present, malformed proposal, item of another employee, insufficient quantity) changes no business state and leaves a committed `denied` audit record with its reason code. Plain input errors (HTTP 400 and 404) leave neither.
 - Two simultaneous approvals for the last units create at most one reservation, for stock and for the same item.
 - A second approval of the same request creates no second reservation and does not change the request state.
-- Approving a request that is not `awaiting_approval` changes nothing.
+- Approving or rejecting a request that is not `awaiting_approval` changes no business state and is audited.
 - Release of a `consumed` reservation is refused. A second release of a `released` reservation has no further effect. A release revokes the approval, releases the reservation and sets `needs_review` together or not at all.
 - Re-review is refused unless the request is `needs_review`, has a proposal, and has no active approval and no `held` reservation. Repeating it causes no second change.
 - A proposal that has a `consumed` reservation or a row in `request_execution` can never be returned to `awaiting_approval`, whatever state the request is in.

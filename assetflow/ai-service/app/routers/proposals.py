@@ -1,11 +1,15 @@
 """처리안 목록과 승인."""
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import Connection, text
 
 from app.db import get_conn
 from app.deps import current_user
 from app.schemas.proposals import ApprovalRequest
+from app.services.approval import ApprovalInputError, decide_proposal
 
 router = APIRouter(prefix="/proposals", tags=["proposals"])
 
@@ -42,6 +46,10 @@ def list_pending(
     return {"items": [dict(row) for row in rows]}
 
 
+# 업무 규칙 거절의 HTTP 상태. 권한만 403 이고 나머지는 상태 충돌(409)이다.
+REFUSAL_STATUS = {"no_permission": 403}
+
+
 @router.post("/{proposal_id}/approval")
 def decide(
     proposal_id: int,
@@ -49,42 +57,25 @@ def decide(
     user: dict = Depends(current_user),
     conn: Connection = Depends(get_conn),
 ):
-    """승인은 '지금 저장된 그 처리안'에 결속된다.
+    """승인은 '지금 저장된 그 처리안'에 결속되고, 승인하면 그 수량을 예약한다.
 
-    payload_digest 를 본문에서 받지 않고 proposal 테이블에서 읽는 이유다.
+    payload_digest 는 본문이 아니라 proposal 테이블에서 읽는다. 업무 규칙으로
+    거절한 경우는 HTTPException 이 아니라 결과값을 돌려준다. 예외를 던지면
+    get_conn 이 롤백해서 감사 기록과 needs_review 전환이 사라진다.
     """
-    if not user["can_approve"]:
-        conn.execute(text(
-            "INSERT INTO audit_log "
-            "(actor_id, action, target_type, target_id, result, reason) "
-            "VALUES (:actor, 'approve', 'proposal', :target, 'denied', "
-            "        '승인 권한 없음')"
-        ), {"actor": user["id"], "target": str(proposal_id)})
-        raise HTTPException(status_code=403, detail="승인 권한이 없다")
+    if body.proposal_id != proposal_id:
+        raise HTTPException(status_code=400,
+                            detail="경로와 본문의 proposal_id 가 다르다")
 
-    if body.decision not in ("approve", "reject"):
-        raise HTTPException(status_code=400, detail="decision 은 approve 또는 reject")
+    try:
+        result = decide_proposal(conn, actor=user, proposal_id=proposal_id,
+                                 decision=body.decision)
+    except ApprovalInputError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    proposal = conn.execute(text(
-        "SELECT request_id, version, payload_digest FROM proposal WHERE id = :id"
-    ), {"id": proposal_id}).one_or_none()
-
-    if proposal is None:
-        raise HTTPException(status_code=404, detail="처리안을 찾을 수 없다")
-
-    conn.execute(text(
-        "INSERT INTO approval "
-        "(request_id, proposal_id, proposal_version, payload_digest, "
-        " approver_id, decision) "
-        "VALUES (:request_id, :proposal_id, :version, :digest, :approver, :decision)"
-    ), {"request_id": proposal.request_id, "proposal_id": proposal_id,
-        "version": proposal.version, "digest": proposal.payload_digest,
-        "approver": user["id"], "decision": body.decision})
-
-    next_state = "ready_to_execute" if body.decision == "approve" else "rejected"
-    conn.execute(text(
-        "UPDATE request SET state = :state, updated_at = now() WHERE id = :id"
-    ), {"state": next_state, "id": proposal.request_id})
-
-    return {"request_id": proposal.request_id, "decision": body.decision,
-            "approver_id": user["id"]}
+    content = asdict(result)
+    if result.outcome == "refused":
+        return JSONResponse(
+            status_code=REFUSAL_STATUS.get(result.reason_code, 409),
+            content=content)
+    return content
