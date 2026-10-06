@@ -16,7 +16,7 @@ from app.services.rereview import ReReviewInputError, re_review_proposal
 router = APIRouter(prefix="/proposals", tags=["proposals"])
 
 # 이 API 가 무엇을 보여주는 창구인지 서버가 정한다. 아무 상태나 열지 않는다.
-PENDING_STATES = {"awaiting_approval", "ready_to_execute"}
+PENDING_STATES = {"awaiting_approval", "ready_to_execute", "needs_review"}
 
 
 @router.get("/pending")
@@ -33,14 +33,36 @@ def list_pending(
         "       p.policy_refs, p.created_at, "
         "       u.display_name AS requester, "
         "       m.code AS asset_code, m.name AS asset_name, "
-        "       ai.qty, ai.allocated_qty, ai.qty - ai.allocated_qty AS remaining, "
-        "       s.on_hand_qty AS stock "
+        "       ai.qty, ai.allocated_qty, "
+        "       ai.qty - ai.allocated_qty AS remaining_item_qty, "
+        "       COALESCE(ir.held_qty, 0) AS held_item_qty, "
+        "       ai.qty - ai.allocated_qty - COALESCE(ir.held_qty, 0) "
+        "         AS reservable_item_qty, "
+        "       s.on_hand_qty, COALESCE(sr.held_qty, 0) AS held_stock_qty, "
+        "       s.on_hand_qty - COALESCE(sr.held_qty, 0) AS reservable_stock_qty, "
+        "       latest.status AS reservation_status, "
+        "       latest.qty AS reservation_qty "
         "FROM proposal p "
         "JOIN request r ON r.id = p.request_id "
         "JOIN app_user u ON u.id = r.employee_id "
         "JOIN assignment_item ai ON ai.id = (p.payload->>'assignment_item_id')::bigint "
         "JOIN asset_model m ON m.id = ai.asset_model_id "
         "LEFT JOIN asset_stock s ON s.asset_model_id = m.id "
+        "LEFT JOIN LATERAL ("
+        "  SELECT COALESCE(sum(r.qty), 0) AS held_qty "
+        "  FROM stock_reservation r "
+        "  WHERE r.assignment_item_id = ai.id AND r.status = 'held'"
+        ") ir ON true "
+        "LEFT JOIN LATERAL ("
+        "  SELECT COALESCE(sum(r.qty), 0) AS held_qty "
+        "  FROM stock_reservation r "
+        "  WHERE r.asset_model_id = m.id AND r.status = 'held'"
+        ") sr ON true "
+        "LEFT JOIN LATERAL ("
+        "  SELECT r.status, r.qty FROM stock_reservation r "
+        "  WHERE r.proposal_id = p.id "
+        "  ORDER BY r.created_at DESC, r.id DESC LIMIT 1"
+        ") latest ON true "
         "WHERE r.state::text = :state "
         "ORDER BY p.created_at DESC"
     ), {"state": state}).mappings().all()

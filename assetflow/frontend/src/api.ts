@@ -13,8 +13,23 @@ export type PendingProposal = {
   asset_name: string
   qty: number
   allocated_qty: number
-  remaining: number
-  stock: number
+  remaining_item_qty: number
+  held_item_qty: number
+  reservable_item_qty: number
+  on_hand_qty: number
+  held_stock_qty: number
+  reservable_stock_qty: number
+  reservation_status: 'held' | 'consumed' | 'released' | null
+  reservation_qty: number | null
+}
+
+export type ProposalActionResult = {
+  outcome: string
+  request_id: number | null
+  proposal_id: number
+  reservation_id?: number | null
+  reason_code?: string | null
+  detail?: string | null
 }
 
 export type TraceRow = {
@@ -98,6 +113,30 @@ export function execute(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
     body: JSON.stringify({ request_id: requestId, proposal_version: proposalVersion }),
+  })
+}
+
+export function releaseProposal(
+  proposalId: number,
+  reason: string,
+  userId: number,
+): Promise<ProposalActionResult> {
+  return request(`/proposals/${proposalId}/release`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function reReviewProposal(
+  proposalId: number,
+  reason: string,
+  userId: number,
+): Promise<ProposalActionResult> {
+  return request(`/proposals/${proposalId}/re-review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
+    body: JSON.stringify({ reason }),
   })
 }
 
