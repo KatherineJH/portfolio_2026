@@ -8,9 +8,10 @@ from sqlalchemy import Connection, text
 
 from app.db import get_conn
 from app.deps import current_user
-from app.schemas.proposals import ApprovalRequest, ReleaseRequest
+from app.schemas.proposals import ApprovalRequest, ReleaseRequest, ReReviewRequest
 from app.services.approval import ApprovalInputError, decide_proposal
 from app.services.release import ReleaseInputError, release_reservation
+from app.services.rereview import ReReviewInputError, re_review_proposal
 
 router = APIRouter(prefix="/proposals", tags=["proposals"])
 
@@ -98,6 +99,32 @@ def release_proposal(
         result = release_reservation(conn, actor=user, proposal_id=proposal_id,
                                      reason=body.reason)
     except ReleaseInputError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    content = asdict(result)
+    if result.outcome == "refused":
+        return JSONResponse(
+            status_code=REFUSAL_STATUS.get(result.reason_code, 409),
+            content=content)
+    return content
+
+
+@router.post("/{proposal_id}/re-review")
+def re_review(
+    proposal_id: int,
+    body: ReReviewRequest,
+    user: dict = Depends(current_user),
+    conn: Connection = Depends(get_conn),
+):
+    """needs_review 에 머문 요청을 같은 처리안으로 다시 승인 대기로 돌린다.
+
+    승인도 예약도 만들지 않는다. 업무 규칙으로 거절한 경우는 HTTPException 이 아니라
+    결과값을 돌려준다. 예외를 던지면 get_conn 이 롤백해서 감사 기록이 사라진다.
+    """
+    try:
+        result = re_review_proposal(conn, actor=user, proposal_id=proposal_id,
+                                    reason=body.reason)
+    except ReReviewInputError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     content = asdict(result)
