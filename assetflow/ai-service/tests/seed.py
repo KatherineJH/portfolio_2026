@@ -210,6 +210,29 @@ def insert_reservation(conn, base: dict, req: dict, **override) -> int:
 
 # ── 검사 도우미 ─────────────────────────────────────────────────────
 
+def db_snapshot(db) -> dict:
+    """업무 상태 전체(감사 기록 제외). 거절 뒤 "아무것도 안 바뀌었다"를 비교하는 데 쓴다."""
+    return {
+        "approvals": rows(
+            db, "SELECT id, request_id, decision, revoked_at, revoked_by, "
+                "revoke_reason FROM approval ORDER BY id"),
+        "reservations": rows(
+            db, "SELECT id, request_id, status, qty, resolved_at, execution_key "
+                "FROM stock_reservation ORDER BY id"),
+        "requests": rows(db, "SELECT id, state FROM request ORDER BY id"),
+        "stock": rows(db, "SELECT asset_model_id, on_hand_qty FROM asset_stock ORDER BY 1"),
+        "items": rows(db, "SELECT id, allocated_qty FROM assignment_item ORDER BY id"),
+        "executions": rows(db, "SELECT execution_key FROM request_execution ORDER BY 1"),
+    }
+
+
+def audit_log_rows(db) -> list[dict]:
+    keys = ("action", "target_type", "target_id", "result", "reason")
+    return [dict(zip(keys, r)) for r in rows(
+        db, "SELECT action, target_type, target_id, result, reason "
+            "FROM audit_log ORDER BY id")]
+
+
 def rows(db, sql: str, **params) -> list[tuple]:
     """새 연결로 읽는다. 커밋된 것만 보인다."""
     with db.engine.connect() as c:

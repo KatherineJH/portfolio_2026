@@ -8,8 +8,9 @@ from sqlalchemy import Connection, text
 
 from app.db import get_conn
 from app.deps import current_user
-from app.schemas.proposals import ApprovalRequest
+from app.schemas.proposals import ApprovalRequest, ReleaseRequest
 from app.services.approval import ApprovalInputError, decide_proposal
+from app.services.release import ReleaseInputError, release_reservation
 
 router = APIRouter(prefix="/proposals", tags=["proposals"])
 
@@ -71,6 +72,32 @@ def decide(
         result = decide_proposal(conn, actor=user, proposal_id=proposal_id,
                                  decision=body.decision)
     except ApprovalInputError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    content = asdict(result)
+    if result.outcome == "refused":
+        return JSONResponse(
+            status_code=REFUSAL_STATUS.get(result.reason_code, 409),
+            content=content)
+    return content
+
+
+@router.post("/{proposal_id}/release")
+def release_proposal(
+    proposal_id: int,
+    body: ReleaseRequest,
+    user: dict = Depends(current_user),
+    conn: Connection = Depends(get_conn),
+):
+    """아직 실행되지 않은 예약을 풀고 그 예약에 연결된 승인을 철회한다.
+
+    업무 규칙으로 거절한 경우는 HTTPException 이 아니라 결과값을 돌려준다.
+    예외를 던지면 get_conn 이 롤백해서 감사 기록이 사라진다.
+    """
+    try:
+        result = release_reservation(conn, actor=user, proposal_id=proposal_id,
+                                     reason=body.reason)
+    except ReleaseInputError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     content = asdict(result)

@@ -14,27 +14,10 @@ from tests.seed import (
     add_assignment, add_item, add_user, insert_reservation, revoke, rows, scalar,
     seed_base, seed_pending, seed_request,
 )
+from tests.seed import audit_log_rows as audit
+from tests.seed import db_snapshot as snapshot
 
 # ── 도우미 ──────────────────────────────────────────────────────────
-
-
-def snapshot(db):
-    """업무 상태 전체. 거절 뒤 "아무것도 안 바뀌었다"를 비교하는 데 쓴다."""
-    return {
-        "approvals": rows(db, "SELECT id, request_id, decision FROM approval ORDER BY id"),
-        "reservations": rows(
-            db, "SELECT id, request_id, status, qty FROM stock_reservation ORDER BY id"),
-        "requests": rows(db, "SELECT id, state FROM request ORDER BY id"),
-        "stock": rows(db, "SELECT asset_model_id, on_hand_qty FROM asset_stock ORDER BY 1"),
-        "items": rows(db, "SELECT id, allocated_qty FROM assignment_item ORDER BY id"),
-    }
-
-
-def audit(db):
-    return [dict(zip(("action", "target_type", "target_id", "result", "reason"), r))
-            for r in rows(
-                db, "SELECT action, target_type, target_id, result, reason "
-                    "FROM audit_log ORDER BY id")]
 
 
 def world(db, *, stock=5, item_qty=2):
