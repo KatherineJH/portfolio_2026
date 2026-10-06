@@ -9,7 +9,7 @@ This document separates reproducible evidence from planned or unverified product
 | Backend quality gate | `uv run pytest -q` → `47 passed, 0 failed` on 2026-10-05 | Locally verified | Uses a pgvector PostgreSQL Testcontainer; no OpenAI call |
 | Frontend static analysis | `npm run lint` completed with no errors on 2026-10-05 | Locally verified | ESLint only; no browser E2E suite |
 | Frontend production build | TypeScript and Vite production build completed on 2026-10-04 | Locally verified | Build success is not a deployment health check |
-| CI definition | `.github/workflows/assetflow-quality.yml` | Configured | A successful GitHub Actions run must be linked after the workflow is pushed |
+| CI quality gate | [`6d12b6d`](https://github.com/KatherineJH/portfolio_2026/commit/6d12b6d96abb743f9c79603113f35eb9fa48bd0f/checks) — run #2 completed in 29 seconds; backend and frontend jobs succeeded | GitHub-verified | Evidence is tied to the tested commit; branch protection is not enabled |
 | Database runtime | `assetflow-db` reported healthy on `127.0.0.1:5433` on 2026-10-05 | Locally observed | Single local container, not high availability |
 | API runtime | `/health` returned `status: ok` during the manual demonstration | Manually verified | Local FastAPI process on port 8005 |
 | Authorization | Viewer approval was rejected; authorized operator approval succeeded | Manually and partially automatically verified | Demo identity header is not production authentication |
@@ -33,6 +33,12 @@ The GitHub Actions workflow has two independent jobs:
    - TypeScript and Vite production build
 
 The workflow has read-only repository permissions, a bounded timeout, dependency caching, and cancellation of superseded runs. It runs only when AssetFlow or its workflow changes.
+
+The first successful repository run was recorded for commit `6d12b6d96abb743f9c79603113f35eb9fa48bd0f` on 2026-10-05:
+
+- **Backend · pytest** — succeeded in 26 seconds;
+- **Frontend · lint and build** — succeeded in 11 seconds; and
+- **Workflow result** — succeeded in 29 seconds overall.
 
 ## Manual end-to-end evidence
 
@@ -59,4 +65,4 @@ Screenshots of request intake, approval management, and observability are stored
 - an independently authored large evaluation set; or
 - production-generalizable accuracy.
 
-After the first successful CI run and Vercel deployment, add their immutable URLs here rather than replacing the scope boundaries above.
+After the Vercel deployment, add its immutable deployment URL here rather than replacing the scope boundaries above.

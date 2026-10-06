@@ -84,3 +84,47 @@ jobs:
 
       - name: Build production frontend
         run: npm run build
+
+  docker-stack:
+    name: Docker · stack smoke and image scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [backend-tests, frontend-quality]
+    defaults:
+      run:
+        working-directory: assetflow/infra
+    env:
+      POSTGRES_PASSWORD: ci-only-password
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build images and start the stack
+        run: docker compose up -d --build --wait
+
+      - name: Smoke test through the web proxy
+        run: |
+          curl -fsS http://127.0.0.1:8080/ > /dev/null
+          curl -fsS http://127.0.0.1:8080/api/health
+          curl -fsS "http://127.0.0.1:8080/api/observability/runs?limit=1"
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=100
+
+      - name: Scan images for fixed HIGH and CRITICAL vulnerabilities
+        working-directory: assetflow
+        run: |
+          for image in assetflow-api:local assetflow-web:local; do
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD/.trivyignore:/.trivyignore:ro" \
+              aquasec/trivy:0.58.0 image \
+              --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+              --ignorefile /.trivyignore --exit-code 1 "$image"
+          done
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v

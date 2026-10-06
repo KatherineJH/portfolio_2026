@@ -147,9 +147,22 @@ npm run dev
 
 Open `http://localhost:5173`. Vite proxies `/api` to `http://127.0.0.1:8005`.
 
+### Full stack in containers
+
+Steps 2 and 3 can be replaced by one Compose stack: PostgreSQL, a one-shot Alembic migration, the API, and the web UI behind nginx. Services start in dependency order and wait on healthchecks.
+
+```powershell
+cd infra
+# infra/.env needs POSTGRES_PASSWORD; OPENAI_API_KEY is read from the environment.
+docker compose up -d --build --wait
+docker compose --profile tools run --rm seed   # first run only
+```
+
+Open `http://127.0.0.1:8080`. nginx forwards `/api` to the API container, matching the Vite proxy rule. All ports bind to `127.0.0.1`. Do not run `seed` against a database whose Alembic history is not in this repository.
+
 ## Verification
 
-The repository includes an [AssetFlow Quality Gate](../.github/workflows/assetflow-quality.yml) that runs on changes under `assetflow/**`. It executes the backend test suite in a pgvector Testcontainer and runs frontend lint plus the production build. See [Operations Evidence](docs/OPERATIONS-EVIDENCE.md) for the distinction between automated, local, manual, and not-yet-verified evidence.
+The repository includes an [AssetFlow Quality Gate](../.github/workflows/assetflow-quality.yml) that runs on changes under `assetflow/**`. It executes the backend test suite in a pgvector Testcontainer and runs frontend lint plus the production build. A Docker job then builds both images, starts the Compose stack, smoke-tests it through the web proxy, and scans the images for fixed HIGH and CRITICAL vulnerabilities. Two accepted findings are listed with reasons in [`.trivyignore`](.trivyignore). The job builds and verifies images; nothing is deployed. See [Operations Evidence](docs/OPERATIONS-EVIDENCE.md) for the distinction between automated, local, manual, and not-yet-verified evidence.
 
 Backend tests use an isolated pgvector PostgreSQL through Testcontainers, not the demo database.
 

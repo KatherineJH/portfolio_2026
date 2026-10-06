@@ -1,13 +1,20 @@
+# 기동 순서: db(healthy) -> migrate(완료) -> api(healthy) -> web
+#
+#   DB 만:        docker compose up -d db
+#   전체 스택:    docker compose up -d --build --wait
+#   시드 적재:    docker compose --profile tools run --rm seed
+#
+# 전체 스택은 http://127.0.0.1:8080 에서 열린다. 포트는 모두 127.0.0.1 에만 바인딩한다.
+
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: assetflow-db
     environment:
       POSTGRES_DB: assetflow
       POSTGRES_USER: assetflow
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?infra/.env 에 POSTGRES_PASSWORD 를 설정하십시오}
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
       - assetflow-pgdata:/var/lib/postgresql/data
     mem_limit: 512m
@@ -15,6 +22,51 @@ services:
       test: ["CMD-SHELL", "pg_isready -U assetflow -d assetflow"]
       interval: 5s
       retries: 12
+
+  migrate:
+    build: ../ai-service
+    image: assetflow-api:local
+    command: ["alembic", "upgrade", "head"]
+    environment: &api-env
+      DATABASE_URL: postgresql+psycopg://assetflow:${POSTGRES_PASSWORD}@db:5432/assetflow
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: assetflow-api:local
+    environment: *api-env
+    ports:
+      - "127.0.0.1:${API_PORT:-8005}:8005"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 512m
+    restart: unless-stopped
+
+  web:
+    build: ../frontend
+    image: assetflow-web:local
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 128m
+    restart: unless-stopped
+
+  # 일회성 작업. 기본 기동에는 포함되지 않는다.
+  seed:
+    image: assetflow-api:local
+    profiles: ["tools"]
+    command: ["python", "seed_dev.py"]
+    environment: *api-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
 
 volumes:
   assetflow-pgdata:

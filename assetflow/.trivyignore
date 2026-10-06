@@ -1,0 +1,14 @@
+# 수정 버전이 있지만 의도적으로 올리지 않은 항목. 재검토: 2026-11-30
+#
+# langchain-core 0.3 -> 1.x, langgraph 0.2 -> 1.x 는 메이저 업그레이드다.
+# 이 코드베이스가 해당 기능을 쓰지 않는 것을 확인했고(grep), 업그레이드는
+# 워크플로 동작 회귀 위험이 더 크다고 판단했다.
+
+# langchain-core: 구형 load_prompt 함수의 경로 탐색.
+# 코드에서 load_prompt 와 langchain_core.load 를 호출하지 않는다.
+CVE-2026-34070
+
+# langgraph-sdk: LangGraph 서버의 리소스 핸들러 인가 우회.
+# langgraph-sdk 는 langgraph 의 전이 의존성이고, LangGraph 서버/플랫폼을
+# 쓰지 않으며 RemoteGraph 도 호출하지 않는다.
+CVE-2026-104873
