@@ -3,6 +3,8 @@
 Date: 2026-09-09
 Status: Accepted — all four decisions agreed by the user on 2026-09-09 (no reservation while awaiting approval, server-issued stable execution key, PostgreSQL business records authoritative, single FastAPI/PostgreSQL transaction boundary).
 
+Update 2026-10-06: the inventory decision (no reservation while awaiting approval) is superseded by [ADR-002](002-stock-reservation.md), which is accepted but not yet implemented. The current code still follows this record's inventory decision until ADR-002 is implemented and verified. The other three decisions remain in force.
+
 ## Context
 
 AssetFlow is a simulated internal IT asset request workflow (domain changed 2026-09-11; the transactional decisions below are unaffected). Inventory timing, request identity, approval validity and recovery are architecture decisions, not unresolved shop policy. Current available engineering hours are unknown, so the minimum design uses one FastAPI application and one PostgreSQL transaction boundary. No separate service or external procurement/dispatch mutation is required.
