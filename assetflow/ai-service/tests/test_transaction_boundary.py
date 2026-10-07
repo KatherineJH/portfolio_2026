@@ -105,7 +105,8 @@ def test_a_non_connection_operational_error_is_not_reported_as_503(api):
 
     app.dependency_overrides[get_conn] = broken
     try:
-        response = api.get("/observability/runs")
+        # 연결 의존성이 먼저 실패하므로 사용자 조회까지 가지 않는다.
+        response = api.get("/observability/runs", headers={"x-user-id": "1"})
     finally:
         app.dependency_overrides.pop(get_conn, None)
 
@@ -121,7 +122,8 @@ def test_a_read_during_a_connection_failure_is_503_without_an_outcome(api):
 
     app.dependency_overrides[get_conn] = unavailable
     try:
-        response = api.get("/observability/runs")
+        # 연결 의존성이 먼저 실패하므로 사용자 조회까지 가지 않는다.
+        response = api.get("/observability/runs", headers={"x-user-id": "1"})
     finally:
         app.dependency_overrides.pop(get_conn, None)
 

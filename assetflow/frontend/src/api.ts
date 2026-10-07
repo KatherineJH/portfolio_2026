@@ -83,13 +83,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function listPending(
-  state = 'awaiting_approval',
+  state: string,
+  userId: number,
 ): Promise<{ items: PendingProposal[] }> {
-  return request(`/proposals/pending?state=${state}`)
+  return request(`/proposals/pending?state=${state}`, {
+    headers: { 'x-user-id': String(userId) },
+  })
 }
 
-export function getTrace(requestId: number): Promise<{ items: TraceRow[] }> {
-  return request(`/requests/${requestId}/trace`)
+export function getTrace(
+  requestId: number,
+  userId: number,
+): Promise<{ items: TraceRow[] }> {
+  return request(`/requests/${requestId}/trace`, {
+    headers: { 'x-user-id': String(userId) },
+  })
 }
 
 export function decide(
@@ -155,10 +163,14 @@ export function submitAssetRequest(
   })
 }
 
-export function listRuns(): Promise<{ items: RunSummary[] }> {
-  return request('/observability/runs')
+export function listRuns(userId: number): Promise<{ items: RunSummary[] }> {
+  return request('/observability/runs', {
+    headers: { 'x-user-id': String(userId) },
+  })
 }
 
-export function getRun(runId: string): Promise<{ items: RunNode[] }> {
-  return request(`/observability/runs/${runId}`)
+export function getRun(runId: string, userId: number): Promise<{ items: RunNode[] }> {
+  return request(`/observability/runs/${runId}`, {
+    headers: { 'x-user-id': String(userId) },
+  })
 }

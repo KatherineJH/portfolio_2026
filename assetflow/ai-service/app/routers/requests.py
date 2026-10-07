@@ -93,7 +93,11 @@ def intake(
 
 
 @router.get("/{request_id}/trace")
-def get_trace(request_id: int, conn: DBConn):
+def get_trace(
+    request_id: int,
+    conn: DBConn,
+    user: dict = Depends(current_user),
+):
     """이 요청을 처리한 노드들의 실행 기록.
 
     run_id 는 워크플로 1회 실행을 묶는 키이고 request_id 는 업무 사례를
@@ -101,8 +105,11 @@ def get_trace(request_id: int, conn: DBConn):
     노드를 전부 가져온다.
 
     같은 요청이 여러 번 실행될 수 있으므로 가장 최근 run_id 를 고른다.
-    ORDER BY 가 없으면 DB 가 아무 행이나 준다.
+    ORDER BY 가 없으면 DB 가 아무 행이나 준다. IT 담당자만 조회한다.
     """
+    if user["kind"] != "it_operator":
+        raise HTTPException(status_code=403, detail="IT 담당자만 처리 기록을 조회할 수 있다")
+
     rows = conn.execute(text(
         "SELECT node_name, attempt_no, latency_ms, model, "
         "       prompt_tokens, completion_tokens, cost_usd, outcome, error_reason "

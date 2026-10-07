@@ -107,14 +107,14 @@ function App() {
     setRunsLoading(true)
     setRunsError(null)
     try {
-      const data = await listRuns()
+      const data = await listRuns(operatorId)
       setRuns(data.items)
     } catch (e) {
       setRunsError(e instanceof Error ? e.message : String(e))
     } finally {
       setRunsLoading(false)
     }
-  }, [])
+  }, [operatorId])
 
   async function onToggleRun(runId: string) {
     if (openRun === runId) {
@@ -124,7 +124,7 @@ function App() {
     setOpenRun(runId)
     if (runNodes[runId]) return
     try {
-      const data = await getRun(runId)
+      const data = await getRun(runId, operatorId)
       setRunNodes((current) => ({ ...current, [runId]: data.items }))
     } catch (e) {
       setRunsError(e instanceof Error ? e.message : String(e))
@@ -135,14 +135,14 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const data = await listPending(tab)
+      const data = await listPending(tab, operatorId)
       setItems(data.items)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [tab])
+  }, [tab, operatorId])
 
   // onDecide 핸들러 추가
   async function onDecide(proposalId: number, choice: 'approve' | 'reject') {
@@ -215,7 +215,7 @@ function App() {
     setOpenTrace(item.request_id)
     if (traces[item.request_id]) return
     try {
-      const data = await getTrace(item.request_id)
+      const data = await getTrace(item.request_id, operatorId)
       setTraces((prev) => ({ ...prev, [item.request_id]: data.items }))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

@@ -2,22 +2,33 @@
 
 This document separates reproducible evidence from planned or unverified production claims. AssetFlow is a locally verified portfolio MVP, not a production deployment.
 
+Status labels used below:
+
+- **Local test run**: automated tests executed on the developer machine (pytest with a Testcontainer, ESLint, Vite build).
+- **Local Docker check**: commands run against an isolated Compose stack on the developer machine.
+- **Manual**: observed by a person in the running UI.
+- **GitHub-verified (historical)**: a GitHub Actions run for an older commit. It is not evidence for the current branch.
+- **Not yet run**: no result exists.
+
+**Remote CI status for the current branch (`feat/stock-reservation`): not yet run.** No GitHub Actions result exists for the reservation work or the read-API authorization change. Every current result below is local.
+
 ## Evidence matrix
 
 | Area | Evidence | Status | Scope boundary |
 |---|---|---|---|
-| Backend quality gate | `pytest -q` → `262 passed` on 2026-10-06 | Locally verified | Uses a pgvector PostgreSQL Testcontainer; no OpenAI call; one non-blocking LangGraph warning |
-| Concurrency regression | 24 concurrency tests passed three consecutive runs on 2026-10-06 | Locally verified | PostgreSQL row locks and forced overlap; not a throughput benchmark |
-| Frontend static analysis | `npm run lint` completed with no errors on 2026-10-06 | Locally verified | ESLint only; no browser automation suite |
-| Frontend production build | TypeScript and Vite production build completed on 2026-10-06 | Locally verified | Build success is not a public deployment |
-| CI quality gate | [`6d12b6d`](https://github.com/KatherineJH/portfolio_2026/commit/6d12b6d96abb743f9c79603113f35eb9fa48bd0f/checks) — run #2 completed in 29 seconds; backend and frontend jobs succeeded | GitHub-verified | Evidence is tied to the tested commit; branch protection is not enabled |
-| Full-stack runtime | Empty-volume migration and seed; db, API, and web healthy on isolated ports | Locally verified | Temporary Compose project removed after verification; not high availability |
-| Authorization | Unauthorized approval, release, and re-review returned 403; authorized flow succeeded | Locally and automatically verified | Demo identity header is not production authentication |
-| Reservation lifecycle | Approve → release → re-review → re-approve → execute completed over HTTP | Locally verified | Synthetic data and simulated dispatch only |
-| Transactional execution | Retry returned the existing result; consumed/execution/dispatch/registered counts were each 1 | Locally verified | Single PostgreSQL boundary, not cross-service exactly-once |
-| Restart recovery | Execution status remained `registered` with a consumed reservation after container restart | Locally verified | Local container restart, not disaster recovery |
-| Workflow observability | Run and node latency, model, tokens, cost, outcome displayed in the UI | Manually verified | No alerting, retention SLO, or external observability platform |
-| Portfolio delivery | Static HTML returned HTTP 200 from a local server | Locally verified | Public Vercel deployment is pending |
+| Backend quality gate | `pytest -q` → `287 passed` on 2026-10-07 | Local test run | Uses a pgvector PostgreSQL Testcontainer; no OpenAI call; one non-blocking LangGraph warning |
+| Concurrency regression | 24 concurrency tests passed three consecutive runs on 2026-10-06; on 2026-10-07 they passed once within the 287-test run | Local test run | PostgreSQL row locks and forced overlap; not a throughput benchmark |
+| Frontend static analysis | `npm run lint` completed with no errors on 2026-10-07 | Local test run | ESLint only; no browser automation suite |
+| Frontend production build | TypeScript and Vite production build completed on 2026-10-07 | Local test run | Build success is not a public deployment |
+| CI quality gate (historical) | [`6d12b6d`](https://github.com/KatherineJH/portfolio_2026/commit/6d12b6d96abb743f9c79603113f35eb9fa48bd0f/checks) — run #2 completed in 29 seconds; backend and frontend jobs succeeded | GitHub-verified (historical) | Predates the reservation work and the Docker job; branch protection is not enabled |
+| CI quality gate (current branch) | Backend, frontend, and Docker jobs for `feat/stock-reservation` | Not yet run | Requires a pull request, manual dispatch, or a push to `main` |
+| Full-stack runtime | Empty-volume migration and seed; db, API, and web healthy on isolated ports (2026-10-06, repeated 2026-10-07) | Local Docker check | Temporary Compose project removed after verification; not high availability |
+| Authorization | pytest covers 403 for approval, release, and re-review and 422/401/403/200 for every read API; the Docker check confirmed the same codes over HTTP (2026-10-06 and 2026-10-07) | Local test run and local Docker check | Demo identity header is not production authentication |
+| Reservation lifecycle | Approve → release → re-review → re-approve → execute completed over HTTP (2026-10-06) | Local Docker check | Synthetic data and simulated dispatch only |
+| Transactional execution | Retry returned the existing result; consumed/execution/dispatch/registered counts were each 1 (2026-10-06) | Local Docker check | Single PostgreSQL boundary, not cross-service exactly-once |
+| Restart recovery | Execution status remained `registered` with a consumed reservation after container restart (2026-10-06) | Local Docker check | Local container restart, not disaster recovery |
+| Workflow observability | Run and node latency, model, tokens, cost, outcome displayed in the UI | Manual | No alerting, retention SLO, or external observability platform |
+| Portfolio delivery | Static HTML returned HTTP 200 from a local server | Manual | Public Vercel deployment is pending |
 
 ## Continuous integration gate
 
@@ -35,12 +46,12 @@ The GitHub Actions workflow has three jobs. The Docker job starts only after the
    - TypeScript and Vite production build
 3. **Docker · stack smoke and image scan**
    - builds the API and web images and starts the Compose stack;
-   - smoke-tests the web proxy and API health/observability routes; and
+   - smoke-tests the web proxy, API health, and the authenticated observability route (an unregistered user must receive 401); and
    - scans both images for fixed HIGH and CRITICAL vulnerabilities with the recorded ignore file.
 
 The workflow has read-only repository permissions, a bounded timeout, dependency caching, and cancellation of superseded runs. It runs only when AssetFlow or its workflow changes.
 
-The first successful repository run was recorded for commit `6d12b6d96abb743f9c79603113f35eb9fa48bd0f` on 2026-10-05:
+The Docker job and the read-API smoke check have not run on GitHub yet. The first successful repository run, which predates both, was recorded for commit `6d12b6d96abb743f9c79603113f35eb9fa48bd0f` on 2026-10-05:
 
 - **Backend · pytest** — succeeded in 26 seconds;
 - **Frontend · lint and build** — succeeded in 11 seconds; and
@@ -74,9 +85,22 @@ An isolated Compose project with a new volume was used so the normal local datab
 7. Unauthorized approval, release, and re-review each returned 403.
 8. SQL checks found zero held-stock, assignment-capacity, and consumed-dispatch invariant violations.
 
-The branch containing this change was still ahead of its remote during verification. Therefore the older
-GitHub-verified CI row above remains historical evidence only. This workflow runs for pull requests,
-pushes to `main`, or manual dispatch; current-branch verification therefore requires one of those events.
+All steps above are a local Docker check. The branch was ahead of its remote, so no GitHub Actions run covers them.
+
+## Read-API authorization verification on 2026-10-07
+
+Local test run:
+
+- `pytest -q` → `287 passed`. The 25 new tests are 4 in `test_pending_quantities.py` and 21 in `test_read_authorization.py`.
+- With the read-API authorization checks removed, the 12 refusal cases in `test_read_authorization.py` failed, so the tests detect a missing check.
+- `npm run lint` and `npm run build` succeeded.
+
+Local Docker check (isolated Compose project, empty volume, removed afterwards):
+
+- the updated CI smoke step passed: no identity → 422, unregistered user → 401 on `/api/observability/runs`;
+- after the development seed: operators with and without approval rights → 200 on runs; an operator → 200 on pending proposals; an employee → 403 on runs, pending proposals, and request trace; an employee reading their own assignments → 200, another employee → 403, an operator → 200.
+
+Remote CI: not yet run. The older GitHub-verified row above remains historical evidence only. The workflow runs for pull requests, pushes to `main`, or manual dispatch, so current-branch CI requires one of those events.
 
 ## Evidence not claimed
 

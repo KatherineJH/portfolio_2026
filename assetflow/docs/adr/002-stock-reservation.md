@@ -122,7 +122,7 @@ Implemented impact:
 
 - Migration `19e6a6ac7866` performs the pre-check, column and constraint rename, revocation fields, reservation table, foreign keys, and partial indexes atomically.
 - Application and seed queries now use `on_hand_qty`; pending-proposal responses expose the separated reservation quantities from decision 13.
-- Approval, execution, release, re-review, transaction-boundary, schema, and concurrency tests cover the new paths. The full suite contains 262 tests; the 24 concurrency tests passed three consecutive runs on 2026-10-06.
+- Approval, execution, release, re-review, transaction-boundary, schema, and concurrency tests cover the new paths. The full suite contains 287 tests (2026-10-07); the 24 concurrency tests passed three consecutive runs on 2026-10-06.
 - `SCHEMA.md`, `SCHEMA-ERD.md`, `FLOW.md`, `TRACEABILITY.md`, README, and operations evidence were reconciled after implementation.
 
 ## Alternatives considered

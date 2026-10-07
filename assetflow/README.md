@@ -35,7 +35,7 @@ Persona switching is a demo feature, not authentication. The browser sends `x-us
 - **Evidence is not authority.** Policy text supports a proposal; an LLM response cannot approve or execute it.
 - **Approval is version-bound.** Approval stores the proposal version and payload digest reviewed by the operator.
 - **Approval reserves quantity.** Approval and its `held` stock/assignment reservation commit together.
-- **Authorization is server-owned.** The API reads `can_approve` from PostgreSQL.
+- **Authorization is server-owned.** The API reads `can_approve` from PostgreSQL. Read APIs also resolve the demo identity: assignment history is visible to the employee or an IT operator, and pending proposals, request traces, and run observability are limited to IT operators.
 - **Execution is idempotent.** An execution key prevents duplicate simulated dispatches.
 - **Locks have one order.** Mutation paths lock request, assignment item, stock, then reservation as needed.
 - **Success follows commit.** Database commit completes before an HTTP success response is sent.
@@ -83,7 +83,7 @@ The frozen evaluation used `gpt-4o-mini` at temperature 0 and `text-embedding-3-
 | LLM cost per request | approximately $0.000227 |
 | LLM-node latency p95 | 1,544 ms |
 | Database-node latency p95 | under 5 ms |
-| Automated tests | 262 passed |
+| Automated tests | 287 passed |
 
 The held-out set contains 16 synthetic cases and was authored within the same project. These results demonstrate reproducibility on the supplied scenarios, not production generalization. See [Evaluation Results](docs/EVALUATION-RESULTS.md) and [experiment history](analysis/experiments.csv).
 
@@ -174,7 +174,7 @@ cd ai-service
 uv run pytest -q
 ```
 
-Verified locally on 2026-10-06: `262 passed` with one non-blocking LangGraph pending-deprecation warning. The 24 concurrency tests also passed three consecutive runs.
+Verified locally on 2026-10-07: `287 passed` with one non-blocking LangGraph pending-deprecation warning. The 24 concurrency tests passed three consecutive runs on 2026-10-06.
 
 ```powershell
 cd frontend

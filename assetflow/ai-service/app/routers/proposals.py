@@ -23,8 +23,15 @@ PENDING_STATES = {"awaiting_approval", "ready_to_execute", "needs_review"}
 def list_pending(
     conn: DBConn,
     state: str = "awaiting_approval",
+    user: dict = Depends(current_user),
 ):
-    """상태별 처리안 목록. 판단에 필요한 사실을 함께 돌려준다."""
+    """상태별 처리안 목록. 판단에 필요한 사실을 함께 돌려준다.
+
+    요청자 이름과 보유 자산이 담기므로 IT 담당자만 조회한다. 승인 권한이
+    없는 담당자도 볼 수는 있다. 권한은 승인·해제·재검토에서 따로 확인한다.
+    """
+    if user["kind"] != "it_operator":
+        raise HTTPException(status_code=403, detail="IT 담당자만 처리안 목록을 조회할 수 있다")
     if state not in PENDING_STATES:
         raise HTTPException(status_code=400, detail=f"알 수 없는 상태: {state}")
 
