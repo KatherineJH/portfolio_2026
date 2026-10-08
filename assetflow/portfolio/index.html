@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="AssetFlow — Agentic AI 서비스의 품질 기준, 자동화 테스트, 실행 안전성과 관측 가능성을 설계한 AI Quality Engineering 포트폴리오"
+      content="AssetFlow — 승인 기반 수량 예약, 안전한 실행과 평가 체계를 구현한 AI Agent 플랫폼 개발 포트폴리오"
     />
     <meta name="theme-color" content="#0b2f26" />
-    <title>AssetFlow | AI Quality Engineering Portfolio</title>
+    <title>AssetFlow | AI Agent Platform Portfolio</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="script.js" defer></script>
   </head>
@@ -20,7 +20,7 @@
         <span class="brand-mark">AF</span>
         <span>
           <strong>AssetFlow</strong>
-          <small>AI Quality Engineering</small>
+          <small>AI Agent Platform</small>
         </span>
       </a>
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
@@ -43,18 +43,18 @@
     <main id="top">
       <section class="hero section-shell" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow">AI QUALITY ENGINEERING · CASE STUDY</p>
+          <p class="eyebrow">AI AGENT PLATFORM · QUALITY ENGINEERING CASE STUDY</p>
           <h1 id="hero-title">잘 대답하는 AI보다<br /><em>잘못 실행하지 않는 AI</em></h1>
           <p class="hero-lede">
             AssetFlow는 사내 IT 자산 교체 요청을 처리하는 Agentic AI 서비스입니다.
-            LLM의 추론을 그대로 신뢰하지 않고, 정책 근거·권한·승인 버전·재고를 서버가 다시 검증하도록 설계했습니다.
+            LLM의 추론을 그대로 신뢰하지 않고, 정책 근거·권한·승인 버전과 예약 수량을 서버가 검증한 뒤에만 업무 상태를 바꾸도록 설계했습니다.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#quality">검증 설계 보기</a>
             <a class="button button-secondary" href="#evidence">실행 화면 보기</a>
           </div>
           <dl class="hero-meta">
-            <div><dt>Role focus</dt><dd>AI Quality Engineering</dd></div>
+            <div><dt>Role focus</dt><dd>AI Agent Platform Engineering</dd></div>
             <div><dt>Stack</dt><dd>FastAPI · LangGraph · React · PostgreSQL</dd></div>
             <div><dt>Scope</dt><dd>개인 프로젝트 · 합성 데이터</dd></div>
           </dl>
@@ -63,7 +63,7 @@
         <aside class="hero-panel" aria-label="핵심 검증 결과">
           <div class="panel-topline"><span>QUALITY SNAPSHOT</span><span class="live-dot">Verified</span></div>
           <div class="hero-score">
-            <strong>47</strong>
+            <strong>287</strong>
             <span>automated tests<br />0 failed</span>
           </div>
           <div class="metric-grid">
@@ -87,7 +87,7 @@
             <article><span>01</span><h3>근거 없는 판단</h3><p>모델이 관련 없는 규정을 인용하거나 대상 자산을 추측할 수 있습니다.</p></article>
             <article><span>02</span><h3>권한 우회</h3><p>브라우저가 전달한 역할이나 사용자 ID를 신뢰하면 승인 경계가 무너집니다.</p></article>
             <article><span>03</span><h3>중복 실행</h3><p>타임아웃 재시도와 동시 요청이 같은 지급을 두 번 실행할 수 있습니다.</p></article>
-            <article><span>04</span><h3>변경된 사실</h3><p>승인 후 재고와 미처리 수량이 달라져도 과거 판단으로 실행될 수 있습니다.</p></article>
+            <article><span>04</span><h3>수량 경합</h3><p>동시에 승인된 요청이 같은 재고와 지급 가능 수량을 약속하면 실행 단계에서 충돌할 수 있습니다.</p></article>
           </div>
         </div>
       </section>
@@ -102,13 +102,13 @@
           </div>
 
           <div class="architecture" role="img" aria-label="React에서 FastAPI, LangGraph, PostgreSQL로 이어지는 AssetFlow 구조">
-            <div class="arch-node arch-client"><span>01</span><strong>React Client</strong><small>요청 · 승인 · 관측 UI</small></div>
+            <div class="arch-node arch-client"><span>01</span><strong>React Client</strong><small>요청 · 승인 · 해제 · 재검토 · 관측</small></div>
             <div class="arch-arrow" aria-hidden="true">→</div>
             <div class="arch-node arch-api"><span>02</span><strong>FastAPI</strong><small>인증 경계 · 서버 검증</small></div>
             <div class="arch-arrow" aria-hidden="true">→</div>
             <div class="arch-node arch-agent"><span>03</span><strong>LangGraph</strong><small>load · retrieve · decide · propose</small></div>
             <div class="arch-arrow" aria-hidden="true">→</div>
-            <div class="arch-node arch-db"><span>04</span><strong>PostgreSQL</strong><small>정책 · 승인 · 재고 · 실행 원장</small></div>
+            <div class="arch-node arch-db"><span>04</span><strong>PostgreSQL</strong><small>정책 · 승인 · 예약 · 실행 원장</small></div>
           </div>
 
           <div class="responsibility-grid">
@@ -118,11 +118,11 @@
             </article>
             <article class="responsibility-card code-card">
               <div class="card-label">CODE</div><h3>결정과 검증</h3>
-              <ul><li>처리 경로와 설명</li><li>대상 어휘 재검증</li><li>정책 인용과 수량 규칙</li></ul>
+              <ul><li>처리 경로와 설명</li><li>대상 어휘 재검증</li><li>정책 인용과 예약 가능량</li></ul>
             </article>
             <article class="responsibility-card db-card">
               <div class="card-label">DATABASE</div><h3>최종 방어</h3>
-              <ul><li>권한과 승인 결속</li><li>UNIQUE · CHECK · FK</li><li>행 잠금과 원자적 실행</li></ul>
+              <ul><li>승인·예약·실행 결속</li><li>UNIQUE · CHECK · 복합 FK</li><li>행 잠금과 원자적 실행</li></ul>
             </article>
           </div>
         </div>
@@ -137,13 +137,13 @@
           <ol class="gate-list">
             <li><span class="gate-number">01</span><div><h3>Evidence Gate</h3><p>지급 관계·점검 상태·재고와 검색된 정책을 분리해 조회합니다. 근거가 부족하면 처리안을 만들지 않습니다.</p></div><small>RAG · target verification</small></li>
             <li><span class="gate-number">02</span><div><h3>Decision Gate</h3><p>모델 출력은 작은 사실 집합으로 제한하고, 결정적 규칙이 need_info·need_review·escalate·propose 경로를 선택합니다.</p></div><small>bounded output · server rules</small></li>
-            <li><span class="gate-number">03</span><div><h3>Approval Gate</h3><p>승인 권한은 DB에서 확인하며 승인 결과를 처리안 버전과 payload digest에 결속합니다.</p></div><small>authorization · version binding</small></li>
-            <li><span class="gate-number">04</span><div><h3>Execution Gate</h3><p>실행 직전에 자산 소유, 승인, 규정 버전, 미처리 수량과 재고를 잠근 뒤 다시 검사합니다.</p></div><small>idempotency · row lock</small></li>
+            <li><span class="gate-number">03</span><div><h3>Approval Gate</h3><p>승인 권한을 DB에서 확인하고 처리안 버전·digest에 결속된 재고와 지급 수량을 함께 예약합니다.</p></div><small>authorization · reservation</small></li>
+            <li><span class="gate-number">04</span><div><h3>Execution Gate</h3><p>승인에 연결된 예약과 자산 소유, 규정 버전, 실제 보유량을 잠근 뒤 다시 검사하고 원자적으로 소비합니다.</p></div><small>idempotency · row lock</small></li>
           </ol>
 
           <div class="test-band">
-            <div><p class="eyebrow">AUTOMATED EVIDENCE</p><h3>47 passed · 0 failed</h3><p>API, 권한, 제약조건, 동시성, 실행 트랜잭션, 그래프 라우팅과 대상 검증을 자동화했습니다. GitHub Actions가 백엔드 테스트와 프런트엔드 lint·build를 각각 검사하도록 구성했습니다.</p></div>
-            <div class="test-tags" aria-label="테스트 범주"><span>Authorization</span><span>Idempotency</span><span>Concurrency</span><span>Transaction</span><span>Routing</span><span>Target verification</span></div>
+            <div><p class="eyebrow">AUTOMATED EVIDENCE</p><h3>287 passed · 0 failed</h3><p>API, 권한, 예약·해제·재검토, 제약조건, 동시성, 실행 트랜잭션, 그래프 라우팅과 대상 검증을 자동화했습니다. 현재 브랜치는 로컬 검증 완료 상태이며 CI 결과는 PR 또는 workflow 실행 후 별도로 확인합니다.</p></div>
+            <div class="test-tags" aria-label="테스트 범주"><span>Authorization</span><span>Reservation</span><span>Idempotency</span><span>Concurrency ×3</span><span>Transaction</span><span>Routing</span></div>
           </div>
         </div>
       </section>
@@ -200,7 +200,7 @@
                 <img src="assets/approval-control.png" alt="승인 권한이 있는 운영자가 처리안을 검토하는 AssetFlow 승인 관리 화면" />
                 <span>확대 보기 ↗</span>
               </button>
-              <figcaption><span>02</span><div><strong>Human approval</strong><p>승인 권한과 처리안 버전을 서버에서 확인합니다.</p></div></figcaption>
+              <figcaption><span>02</span><div><strong>Reservation-aware approval</strong><p>보유량·예약량·승인 가능량을 구분하고 승인·해제·재검토 흐름을 제공합니다.</p></div></figcaption>
             </figure>
             <figure>
               <button class="image-button" type="button" data-image="assets/workflow-observability.png" data-caption="노드별 지연·모델·토큰을 확인하는 실행 관측 화면">
@@ -223,9 +223,9 @@
             <div class="scope-head" role="row"><span role="columnheader">검증한 것</span><span role="columnheader">아직 검증하지 않은 것</span></div>
             <div role="row"><span role="cell">실제 LLM 호출과 정책 근거 생성</span><span role="cell">실제 임직원 데이터와 운영 트래픽</span></div>
             <div role="row"><span role="cell">권한 없는 운영자의 승인 거부</span><span role="cell">OAuth/JWT 기반 실제 인증</span></div>
-            <div role="row"><span role="cell">승인 후 재고·수량 원자적 반영</span><span role="cell">외부 지급·구매 시스템 연동</span></div>
+            <div role="row"><span role="cell">승인 시 재고·지급 수량 예약, 실행 시 원자적 소비</span><span role="cell">외부 지급·구매 시스템 연동</span></div>
             <div role="row"><span role="cell">합성 16건의 held-out 반복 평가</span><span role="cell">독립 작성 대규모 평가셋</span></div>
-            <div role="row"><span role="cell">로컬 Docker·프로덕션 빌드·CI workflow 구성</span><span role="cell">클라우드 HA·branch protection·배포 승인 연계</span></div>
+            <div role="row"><span role="cell">빈 볼륨 Docker E2E·재기동·동시성 반복 검증</span><span role="cell">클라우드 HA·부하/SLO·자동 예약 만료</span></div>
           </div>
         </div>
       </section>
@@ -244,7 +244,7 @@
     </main>
 
     <footer>
-      <span>AssetFlow · AI Quality Engineering Portfolio</span>
+      <span>AssetFlow · AI Agent Platform Portfolio</span>
       <span>Designed and verified with synthetic data · 2026</span>
     </footer>
 

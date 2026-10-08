@@ -6,6 +6,8 @@ import {
   getTrace,
   listRuns,
   listPending,
+  releaseProposal,
+  reReviewProposal,
   submitAssetRequest,
   type IntakeResponse,
   type PendingProposal,
@@ -55,7 +57,7 @@ function App() {
   const [busy, setBusy] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'awaiting_approval' | 'ready_to_execute'>(
+  const [tab, setTab] = useState<'awaiting_approval' | 'ready_to_execute' | 'needs_review'>(
   'awaiting_approval',
   )
   const [openTrace, setOpenTrace] = useState<number | null>(null)
@@ -105,14 +107,14 @@ function App() {
     setRunsLoading(true)
     setRunsError(null)
     try {
-      const data = await listRuns()
+      const data = await listRuns(operatorId)
       setRuns(data.items)
     } catch (e) {
       setRunsError(e instanceof Error ? e.message : String(e))
     } finally {
       setRunsLoading(false)
     }
-  }, [])
+  }, [operatorId])
 
   async function onToggleRun(runId: string) {
     if (openRun === runId) {
@@ -122,7 +124,7 @@ function App() {
     setOpenRun(runId)
     if (runNodes[runId]) return
     try {
-      const data = await getRun(runId)
+      const data = await getRun(runId, operatorId)
       setRunNodes((current) => ({ ...current, [runId]: data.items }))
     } catch (e) {
       setRunsError(e instanceof Error ? e.message : String(e))
@@ -133,14 +135,14 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const data = await listPending(tab)
+      const data = await listPending(tab, operatorId)
       setItems(data.items)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [tab])
+  }, [tab, operatorId])
 
   // onDecide 핸들러 추가
   async function onDecide(proposalId: number, choice: 'approve' | 'reject') {
@@ -170,6 +172,40 @@ function App() {
     }
   }
 
+  async function onRelease(item: PendingProposal) {
+    if (busy !== null) return
+    const reason = window.prompt('예약을 해제하는 사유를 입력해 주세요.')?.trim()
+    if (!reason || !window.confirm('이 예약을 해제하고 요청을 재검토 상태로 바꿀까요?')) return
+
+    setBusy(item.proposal_id)
+    setError(null)
+    try {
+      await releaseProposal(item.proposal_id, reason, operatorId)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function onReReview(item: PendingProposal) {
+    if (busy !== null) return
+    const reason = window.prompt('재검토 사유를 입력해 주세요.')?.trim()
+    if (!reason || !window.confirm('이 요청을 다시 승인 대기 상태로 보낼까요?')) return
+
+    setBusy(item.proposal_id)
+    setError(null)
+    try {
+      await reReviewProposal(item.proposal_id, reason, operatorId)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   // Trace Toggle 핸들러 추가
   async function onToggleTrace(item: PendingProposal) {
     if (openTrace === item.request_id) {
@@ -179,7 +215,7 @@ function App() {
     setOpenTrace(item.request_id)
     if (traces[item.request_id]) return
     try {
-      const data = await getTrace(item.request_id)
+      const data = await getTrace(item.request_id, operatorId)
       setTraces((prev) => ({ ...prev, [item.request_id]: data.items }))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -530,6 +566,12 @@ function App() {
           >
             실행 대기
           </button>
+          <button
+            className={tab === 'needs_review' ? 'tab on' : 'tab'}
+            onClick={() => setTab('needs_review')}
+          >
+            재검토
+          </button>
         </nav>
 
         <button onClick={refresh} disabled={loading}>
@@ -543,7 +585,9 @@ function App() {
         <p className="empty">
           {tab === 'awaiting_approval'
             ? '승인 대기 중인 요청이 없습니다.'
-            : '실행 대기 중인 요청이 없습니다.'}
+            : tab === 'ready_to_execute'
+              ? '실행 대기 중인 요청이 없습니다.'
+              : '재검토가 필요한 요청이 없습니다.'}
         </p>
       )}
 
@@ -566,11 +610,21 @@ function App() {
                 {item.qty}개 / {item.allocated_qty}개
               </dd>
 
-              <dt>미처리</dt>
-              <dd>{item.remaining}개</dd>
+              <dt>지급 가능 / 예약</dt>
+              <dd>{item.reservable_item_qty}개 / {item.held_item_qty}개</dd>
 
-              <dt>교체 재고</dt>
-              <dd>{item.stock}개</dd>
+              <dt>재고 보유 / 예약</dt>
+              <dd>{item.on_hand_qty}개 / {item.held_stock_qty}개</dd>
+
+              <dt>승인 가능 재고</dt>
+              <dd>{item.reservable_stock_qty}개</dd>
+
+              {item.reservation_status && (
+                <>
+                  <dt>현재 예약</dt>
+                  <dd>{item.reservation_qty}개 · {item.reservation_status}</dd>
+                </>
+              )}
 
               <dt>근거 규정</dt>
               <dd>
@@ -598,12 +652,21 @@ function App() {
                     거절
                   </button>
                 </>
+              ) : tab === 'ready_to_execute' ? (
+                <>
+                  <button onClick={() => onExecute(item)} disabled={busy !== null}>
+                    실행
+                  </button>
+                  <button className="secondary" onClick={() => onRelease(item)} disabled={busy !== null}>
+                    예약 해제
+                  </button>
+                </>
               ) : (
-                <button onClick={() => onExecute(item)} disabled={busy !== null}>
-                  실행
+                <button onClick={() => onReReview(item)} disabled={busy !== null}>
+                  재검토 요청
                 </button>
               )}
-              <button className="secondary" onClick={() => onToggleTrace(item)}>
+              <button className="secondary" onClick={() => onToggleTrace(item)} disabled={busy !== null}>
                 {openTrace === item.request_id ? '처리 과정 닫기' : '처리 과정'}
               </button>
             </div>

@@ -99,7 +99,7 @@ def main() -> None:
                 "VALUES (:code, :name, :category)"
             ), {"code": code, "name": name, "category": category})
             conn.execute(text(
-                "INSERT INTO asset_stock (asset_model_id, available_qty) "
+                "INSERT INTO asset_stock (asset_model_id, on_hand_qty) "
                 "VALUES ((SELECT id FROM asset_model WHERE code = :code), :stock)"
             ), {"code": code, "stock": stock})
 

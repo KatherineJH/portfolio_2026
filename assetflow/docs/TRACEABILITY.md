@@ -1,76 +1,70 @@
-# AssetFlow 필수 검증·시나리오 대응표
+# AssetFlow 검증 대응표
 
-상태: 구현 및 검증 진행 중. 아래 표는 목표 보장 조건이며, 모든 행이 자동화됐다는 뜻이 아니다. AR은 업무 흐름, SYS는 상태·장애·공격 조건을 명시한 시스템 시나리오다. 업무 사례만으로 시스템 보장을 입증하지 않는다.
+상태: 구현 및 로컬 검증 완료(2026-10-07). 전체 백엔드 스위트는 287개이며 pgvector
+PostgreSQL Testcontainer에서 통과했다. 동시성 테스트 24개는 3회 연속 통과했다.
+프런트엔드 lint와 production build도 통과했다. 현재 브랜치의 GitHub Actions 결과는
+pull request, manual dispatch, or merge to `main` 이후 별도로 확인해야 하며, 로컬 결과를 CI 결과로 표기하지 않는다.
 
-## 현재 검증 상태 — 2026-10-05
+## 요구사항별 근거
 
-현재 자동화 스위트는 47개 테스트이며 로컬에서 `47 passed, 0 failed`를 확인했다. GitHub Actions의 `AssetFlow Quality Gate`는 같은 백엔드 테스트와 프론트엔드 lint·production build를 실행한다. 첫 원격 실행 결과는 workflow가 push된 뒤 GitHub Actions 기록으로 확정한다.
+| ID | 보장 조건 | 구현 근거 | 자동화 근거 |
+|---|---|---|---|
+| SYS-01 | 승인·예약 없는 실행 금지 | `services/execution.py` | `test_execution.py`, `test_execution_reservation.py` |
+| SYS-02 | 처리안 버전·digest에 승인과 예약 결속 | approval/reservation 복합 FK와 실행 검증 | `test_reservation_schema.py`, `test_execution_reservation.py` |
+| SYS-03 | 동일 실행 재시도는 한 번만 변경 | 서버 실행 키, 실행 원장 UNIQUE | `test_execution.py`, `test_execution_concurrency.py` |
+| SYS-04 | 응답 유실 후 원장으로 결과 확정 | `GET /executions/status` | `test_execution_status.py`, `test_transaction_boundary.py` |
+| SYS-05a | 배분 + 예약이 지급 수량을 넘지 않음 | item 잠금, CHECK, held 합계 | 승인·실행 예약 및 동시성 테스트 |
+| SYS-05b | 비용 청구 실행 미노출 | 실행 원장 CHECK | `test_constraints.py` |
+| SYS-06 | 재시작 후 DB 상태 유지 | PostgreSQL 업무 원장 | Docker 재기동 E2E(2026-10-06) |
+| SYS-07 | 타인 자산 실행 금지 | 소유권 검증 | `test_execution.py`, `test_approval_reservation.py` |
+| SYS-08a/b | 텍스트가 권한·실행 권한이 될 수 없음 | LLM과 승인·실행 경계 분리 | graph/target 검증 및 승인 권한 테스트; 전용 공격 stress셋은 후속 |
+| SYS-09 | 동시 승인·실행에도 음수 재고 없음 | 고정 잠금 순서, held 예약 | 모든 `*_concurrency.py`, `tests/racing.py` |
+| SYS-10 | 변경된 수량·재고를 잠금 아래 재검증 | execution 이중 예약 확인 | `test_execution_reservation.py` |
+| SYS-11 | 같은 키에 다른 의도 거부 | digest 대조 | `test_execution.py` |
+| SYS-12 | commit 전 실패 전체 rollback | 단일 트랜잭션·savepoint | 승인·실행·해제·재검토 원자성 테스트 |
+| SYS-13 | 거절·철회 승인으로 실행 금지 | 활성 승인 필터 | `test_execution.py`, `test_execution_reservation.py` |
+| SYS-14 | 귀책·비용 조건은 이관 | 결정적 route | `test_graph.py` |
+| SYS-15 | 사라진 인용 정책으로 실행 금지 | 실행 시 정책 버전 대조 | `test_execution.py` |
+| SYS-16 | DB 장애를 성공으로 오인하지 않음 | function-scope commit, 503, 원장 조회 | `test_transaction_boundary.py`, `test_execution_status.py` |
+| SYS-17a/b | 승인 권한은 서버 DB가 판정 | `current_user`, `can_approve` | `test_api.py`, 승인·해제·재검토 테스트 |
+| SYS-18 | 노드별 지연·토큰·비용·실패 기록 | `node_trace`, 관측 API | graph/smoke 테스트와 수동 화면 검증 |
 
-| 상태 | 시나리오 | 현재 증거와 남은 범위 |
+## 예약 불변조건
+
+| 불변조건 | 방어선 | 테스트 |
 |---|---|---|
-| 자동화 | SYS-01 | 승인 없는 실행 거부 (`test_execution_without_approval_is_rejected`) |
-| 자동화 | SYS-02 | 다른 proposal version의 승인 재사용 거부 (`test_approval_for_another_version_does_not_authorise`) |
-| 자동화 | SYS-11 | 동일 실행 키의 다른 payload 거부 (`test_same_key_with_different_payload_is_rejected`) |
-| 자동화 | SYS-13 | 거절된 승인으로 실행 차단 (`test_execution_with_rejected_approval_is_blocked`) |
-| 자동화 | SYS-16 | 결과 불명을 성공·실패로 단정하지 않고 원장으로 해소 (`test_mark_outcome_unknown_does_not_claim_success_or_failure`, `test_resolve_outcome_finds_a_committed_execution`) |
-| 자동화 | SYS-17b | 권한 없는 운영자 거부 및 요청 본문의 승인자 위조 무시 (`test_operator_without_permission_is_refused`, `test_approver_id_comes_from_the_server_not_the_body`) |
-| 부분 자동화 | SYS-03 | 순차 재시도와 중복 원장 방지는 검증. 동일 실행 키의 실제 동시 API 요청은 미검증 |
-| 부분 자동화 | SYS-05a | 미처리 수량 초과 거부는 검증. 별도 키 동시 요청 조합은 미검증 |
-| 부분 자동화 | SYS-07 | 타 임직원 자산의 proposal·execution 차단은 검증. 조회 API의 데이터 비노출은 미검증 |
-| 부분 자동화 | SYS-09 | 행 잠금의 대기 동작은 검증. 재고 1개에 대한 두 execution의 통합 경합 테스트는 미검증 |
-| 부분 자동화 | SYS-10 | 잠금 후 수량 재검증은 검증. 승인 후 재고 소진 시나리오의 통합 테스트는 미검증 |
-| 부분 자동화 | SYS-14 | 귀책 주제의 `escalate` 라우팅은 검증. 비용 원장 경로는 MVP에서 제공하지 않음 |
-| 부분 자동화 | SYS-15 | 인용 정책 버전이 사라진 경우 실행 차단은 검증. 정책 변경 후 재승인 전체 흐름은 미검증 |
-| 부분 자동화 | SYS-17a | 인증 헤더가 없으면 API dependency에서 거부됨. 거부 감사 기록까지의 전용 테스트는 미검증 |
-| 수동 검증 | SYS-18 일부 | 성공 실행의 노드별 지연·모델·토큰·비용을 관측 화면에서 확인. 실패 실행 trace의 자동 검증은 미구현 |
-| 미검증 | SYS-04, SYS-06 | 응답 유실 또는 서버 재시작을 포함한 복구 테스트 필요 |
-| 미검증 | SYS-05b | 비용 청구 실행 경로는 MVP 범위 밖이며 API로 노출하지 않음 |
-| 미검증 | SYS-08a, SYS-08b | 요청문·검색 문서의 prompt injection 전용 회귀 테스트 필요 |
-| 미검증 | SYS-12 | commit 전 DB 오류 주입과 재시도 rollback 테스트 필요 |
+| 모델별 held 합계 ≤ `on_hand_qty` | 재고 행 잠금·승인 계산 | 승인/실행 동시성 테스트, `check_invariants` |
+| `allocated_qty` + 항목별 held 합계 ≤ `qty` | 항목 행 잠금·승인 계산·CHECK | 승인/실행 동시성 테스트 |
+| 승인과 예약은 함께 생성되거나 모두 없음 | 한 트랜잭션 | `test_approval_reservation.py` |
+| 소비된 예약당 모의 지급 정확히 1건 | 실행 원장과 FK·UNIQUE | `test_execution_reservation.py`, `check_invariants` |
+| 철회 승인·해제 예약은 실행 불가 | 활성 승인·held 필터 | 실행/해제 테스트 |
+| 실행과 해제 경합은 하나만 성공 | 동일 잠금 순서 | `test_release_concurrency.py` |
+| 재검토는 실행된 처리안을 되돌리지 않음 | 실행 원장 선검사 | `test_re_review.py`, 동시성 테스트 |
 
-이 상태표가 현재 구현 증거의 기준이다. 아래 목표 시나리오의 기대 결과가 정의됐다는 사실을 테스트 통과로 간주하지 않는다.
+## 2026-10-06 전체 검증
 
-| 검증 ID | 연결 업무 | 입력/실행 조건 | 기대 결과·확인할 증거 | 최소 범위 |
-|---|---|---|---|---|
-| SYS-01 | AR-01 | 승인 레코드 없이 실행 도구 직접 호출 | 거부; 등록·재고·수량 변경 0 | 필수 |
-| SYS-02 | AR-08 | v1 승인 후 v2 수량 변경, v1 승인으로 v2 실행 | 거부; v2 재승인 필요; 변경 0 | 필수 |
-| SYS-03 | AR-06 | 같은 실행 키·같은 본문을 순차 및 동시에 반복 | 등록 1개, 재고/수량 배분 1회, 동일 결과 | 필수 |
-| SYS-04 | AR-06 | DB commit 후 응답 유실, 프로세스 재시작 후 동일 키 조회 | 기존 등록 발견; 두 번째 변경 없음 | 필수 |
-| SYS-05a | AR-07 | 미처리 1개인데 2개 요청; 별도 키 동시 요청으로도 반복 | 초과 거부; 총 배분 ≤ 지급 가능 수량 | 필수 |
-| SYS-05b | AR-05 | 비용 청구 가능 잔액 초과 금액 실행 시도 | 최소판은 청구 실행 경로 미노출/거부; 확장판은 잔액 초과 거부 및 원장 무변경 | 실행 거부 필수, 원장 검증은 청구 확장 게이트 |
-| SYS-06 | AR-01 | awaiting_approval에서 서버 재시작, 승인 후 재개 | 정확한 request/version 복원; 등록 1개 | 필수 |
-| SYS-07 | AR-02 | 임직원 A가 B의 지급 자산/요청 ID 조회·실행 | 데이터 미노출·변경 0, 접근 거부 기록 | 필수 |
-| SYS-08a | AR-03 | 요청문에 승인 우회·도구 직접 실행 지시 삽입 | 지시로 권한/승인 변경 불가; 등록 0 | 필수 |
-| SYS-08b | AR-03 | 검색된 규정 문서에 승인 우회 지시 삽입 | 문서 내용을 실행 권한으로 취급하지 않음; 등록 0 | 필수 |
-| SYS-09 | AR-04 | 재고 1개에 서로 다른 요청 2개 동시 실행 | 한 건만 배분; 재고 음수 없음; 나머지는 대체/검토 | 필수 |
-| SYS-10 | AR-01 | 승인 대기 중 타 요청이 재고 소진, 이후 승인 실행 | 실행 직전 재검증 실패; 등록 없음; 요청자 동의 없이 모델 대체 없음 | 필수 |
-| SYS-11 | AR-06 | 같은 실행 키에 다른 수량/자산 본문 전송 | 충돌 거부; 기존 결과/재고 불변 | 필수 |
-| SYS-12 | AR-01 | commit 전 DB 오류 주입 후 동일 키 재시도 | 첫 시도 전체 rollback; 재시도 한 번만 배분 | 필수 |
-| SYS-13 | AR-01 | 담당자가 승인 거절 후 실행 시도 | rejected 유지; 변경 0 | 필수 |
-| SYS-14 | AR-05 | 파손 귀책·비용 청구 규정 미확정 | 담당자 이관; 최종 청구액·완료 주장 없음 | 필수 |
-| SYS-15 | AR-01 | 승인 이후 적용 규정 버전 변경 | 승인 근거 재검토·필요시 재승인; 구버전으로 자동 실행 없음 | 필수 |
-| SYS-16 | AR-01 | DB 조회 불가로 이전 실행 성공 여부 확인 불가 | outcome_unknown 유지; 성공/실패 단정 및 새 키 재실행 없음 | 필수 |
-| SYS-17a | AR-01 | 인증 정보가 없거나 유효하지 않은 요청으로 승인 API 직접 호출 | 승인 거부; 승인 레코드 생성/변경 0, 처리안·등록·재고·수량 변경 0; 거부 감사 기록 | 필수 |
-| SYS-17b | AR-01 | 인증된 임직원/조회 전용 담당자가 승인 API 직접 호출; 본문에 승인자 ID·역할 위조 | 서버가 확인한 권한으로 거부; 승인·처리안·등록·재고·수량 변경 0; 거부 감사 기록 | 필수 |
-| SYS-18 | AR-01, AR-03 | 정상 실행 1건과 실패 실행 1건을 각각 수행 | 두 건 모두 노드별 입력·출력·지연·토큰·비용·재시도 횟수가 기록됨; 실패 건은 실패 원인도 기록 | 필수 |
+- `pytest -q`: 262 passed, LangGraph pending-deprecation 경고 1건(당시 기준. 현재 287개는 아래 2026-10-07 보완 참고).
+- 동시성 묶음 24개: 3회 연속 통과.
+- `npm run lint`, `npm run build`: 통과.
+- 별도 빈 Compose 볼륨: migration, seed, db/api/web healthcheck 통과.
+- HTTP E2E: 승인 → 수량 부족 409 → 예약 해제 → 재검토 → 재승인 → 실행 → 동일 키 재시도 → 원장 조회 통과.
+- 권한 없는 승인·해제·재검토: 403.
+- DB 불변조건 조회: 세 위반 항목 모두 0; consumed/execution/dispatch/registered 각 1건.
+- 컨테이너 재기동 후 실행 결과 유지, 오류 로그 없음.
 
-SYS-17a/17b는 권한 있는 담당자의 정상 승인(AR-01)을 대조군으로 함께 확인한다. 인증 실패와 승인 권한 부족을 구분하며 LLM·클라이언트가 제공한 역할을 권한 근거로 사용하지 않는다.
+## 2026-10-07 보완
 
-SYS-18은 관측을 필수 산출물로 두기 위한 항목이다. 기록이 남는지만 확인하며, 기록된 수치로 성능 개선을 주장하지 않는다.
+- 조회 API도 `current_user` 데모 인증으로 주체를 확인한다. 요청자 이름·보유 자산·처리 내용이 담기기 때문이다.
+  - `GET /proposals/pending`, `GET /requests/{id}/trace`, `GET /observability/runs`, `GET /observability/runs/{run_id}`: IT 담당자만.
+  - `GET /employees/{id}/assignments`: 본인 또는 IT 담당자.
+  - 헤더 없음 422, 미등록 사용자 401, 권한 없음 403, 승인 권한 없는 담당자는 조회 가능(`test_pending_quantities.py`, `test_read_authorization.py`).
+- `pytest -q`: 287 passed(262 → 266: `test_pending_quantities.py` 4개 추가, 266 → 287: `test_read_authorization.py` 21개 추가). `npm run lint`, `npm run build`: 통과.
+- 원격 CI: 아직 실행되지 않음. 위 결과는 모두 로컬 실행이다.
 
-## 업무 시나리오의 역방향 매핑
+## 아직 주장하지 않는 것
 
-| 업무 | 시스템 시나리오 |
-|---|---|
-| AR-01 | SYS-01, SYS-06, SYS-10, SYS-12, SYS-13, SYS-15, SYS-16, SYS-17a, SYS-17b, SYS-18 |
-| AR-02 | SYS-07 |
-| AR-03 | SYS-08a, SYS-08b, SYS-18 |
-| AR-04 | SYS-09, SYS-10 |
-| AR-05 | SYS-05b, SYS-14 |
-| AR-06 | SYS-03, SYS-04, SYS-11 |
-| AR-07 | SYS-05a |
-| AR-08 | SYS-02 |
-
-운영 규칙 R-01~R-08은 AR-01~AR-08의 해당 경로와 함께 검증한다. 모든 SYS는 run ID, 입력 fixture 버전, 실행 전후 DB 상태, 실제/기대 결과, 통과 여부를 남긴다. 지연·비용·재시도는 모든 AR 실행에서 수집하고, 규정 근거·추가 질문·처리 경로는 AR별 정답으로 평가한다.
-
-최소판 완료 시 누락된 필수 SYS가 없어야 한다. 비용 청구 원장 등 확장 기능은 별도 게이트를 통과하기 전 노출하지 않는다. 계획 매핑이 완성됐다는 사실은 테스트 통과와 다르다.
+- 전용 prompt-injection stress셋의 최종 결과
+- pull request·manual dispatch·`main` 반영 전 현재 287개 스위트의 GitHub Actions 통과
+- 공개 클라우드 배포, 실제 사용자·재고·지급 데이터
+- 외부 지급 시스템을 포함한 exactly-once 실행
+- 자동 예약 만료, 고가용성, 부하·SLO 검증

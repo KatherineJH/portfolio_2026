@@ -12,3 +12,17 @@ class ApprovalRequest(BaseModel):
 
     proposal_id: int
     decision: str
+
+
+class ReleaseRequest(BaseModel):
+    """해제 본문. 사유는 필수인데, 필드가 없으면 기본값 빈 문자열이 되어
+    '사유가 비어 있다'와 같은 400 으로 처리한다."""
+
+    reason: str = ""
+
+
+class ReReviewRequest(BaseModel):
+    """재검토 본문. 사유는 필수인데, 필드가 없으면 기본값 빈 문자열이 되어
+    '사유가 비어 있다'와 같은 400 으로 처리한다."""
+
+    reason: str = ""

@@ -4,15 +4,15 @@ routers 도 services 도 아닌 자리다. routers/ 에 두면 서비스가 라�
 import 하게 되어 방향이 거꾸로 된다.
 """
 
-from fastapi import Depends, Header, HTTPException
-from sqlalchemy import Connection, text
+from fastapi import Header, HTTPException
+from sqlalchemy import text
 
-from app.db import get_conn
+from app.db import DBConn
 
 
 def current_user(
+    conn: DBConn,
     x_user_id: int = Header(...),
-    conn: Connection = Depends(get_conn),
 ) -> dict:
     """인증된 주체를 서버가 확인한다.
 

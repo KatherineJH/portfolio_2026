@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from app.db import get_conn
 from app.main import app
+from tests.seed import add_user, seed_base, seed_pending
 
 
 @pytest.fixture
@@ -16,27 +17,13 @@ def client(conn):
 
 @pytest.fixture
 def approval_case(conn):
-    conn.execute(text(
-        "INSERT INTO app_user (kind, display_name, can_approve) "
-        "VALUES ('it_operator', 'op-yes', true), ('it_operator', 'op-no', false)"
-    ))
-    conn.execute(text(
-        "INSERT INTO request (employee_id, state) "
-        "VALUES ((SELECT id FROM app_user WHERE display_name='op-yes'), "
-        "        'awaiting_approval')"
-    ))
-    proposal_id = conn.execute(text(
-        "INSERT INTO proposal "
-        "(request_id, version, action_type, payload, payload_digest, policy_refs) "
-        "VALUES ((SELECT max(id) FROM request), 1, 'replacement', '{}', 'd1', '[]') "
-        "RETURNING id"
-    )).scalar_one()
+    """승인 대기 요청 하나. 처리안은 그래프가 쓰는 모양의 payload 를 가진다."""
+    base = seed_base(conn)
+    pending = seed_pending(conn, base)
     return {
-        "proposal_id": proposal_id,
-        "op_yes": conn.execute(text(
-            "SELECT id FROM app_user WHERE display_name='op-yes'")).scalar_one(),
-        "op_no": conn.execute(text(
-            "SELECT id FROM app_user WHERE display_name='op-no'")).scalar_one(),
+        "proposal_id": pending["proposal_id"],
+        "op_yes": base["operator_id"],
+        "op_no": add_user(conn, "op-no", kind="it_operator", can_approve=False),
     }
 
 

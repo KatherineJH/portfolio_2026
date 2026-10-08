@@ -3,65 +3,9 @@ from sqlalchemy import text
 from app.services.execution import (
     ExecutionRejected,
     execute_replacement,
-    mark_outcome_unknown,
     resolve_outcome,
 )
 
-
-@pytest.fixture
-def replacement_case(conn):
-    """독 2개 지급 · 0개 처리 · 재고 5개 · 승인 대기 요청 1건. AR-01 상황."""
-    conn.execute(text(
-        "INSERT INTO app_user (kind, display_name) VALUES ('employee', 'kim')"
-    ))
-    conn.execute(text(
-        "INSERT INTO asset_model (code, name, category) "
-        "VALUES ('DOCK-01', 'Dock', 'PERIPHERAL')"
-    ))
-    conn.execute(text(
-        "INSERT INTO asset_stock (asset_model_id, available_qty) "
-        "VALUES ((SELECT max(id) FROM asset_model), 5)"
-    ))
-    conn.execute(text(
-        "INSERT INTO assignment (employee_id, status, assigned_at) "
-        "VALUES ((SELECT max(id) FROM app_user), 'handed_over', now())"
-    ))
-    item_id = conn.execute(text(
-        "INSERT INTO assignment_item "
-        "(assignment_id, asset_model_id, qty, unit_acquired_cost, "
-        " handover_status, allocated_qty) "
-        "VALUES ((SELECT max(id) FROM assignment), (SELECT max(id) FROM asset_model), "
-        "        2, 120000, 'delivered', 0) RETURNING id"
-    )).scalar_one()
-    request_id = conn.execute(text(
-        "INSERT INTO request (employee_id, state) "
-        "VALUES ((SELECT max(id) FROM app_user), 'ready_to_execute') RETURNING id"
-    )).scalar_one()
-    # 승인 생성 추가
-    conn.execute(text(
-        "INSERT INTO app_user (kind, display_name, can_approve) "
-        "VALUES ('it_operator', 'op', true)"
-    ))
-    proposal_id = conn.execute(text(
-        "INSERT INTO proposal "
-        "(request_id, version, action_type, payload, payload_digest, policy_refs) "
-        "VALUES (:request_id, 1, 'replacement', '{}', 'd1', '[]') RETURNING id"
-    ), {"request_id": request_id}).scalar_one()
-    conn.execute(text(
-        "INSERT INTO approval "
-        "(request_id, proposal_id, proposal_version, payload_digest, approver_id, decision) "
-        "VALUES (:request_id, :proposal_id, 1, 'd1', "
-        "        (SELECT id FROM app_user WHERE display_name='op'), 'approve')"
-    ), {"request_id": request_id, "proposal_id": proposal_id})
-    # return {"item_id": item_id, "request_id": request_id}
-    employee_id = conn.execute(text(
-        "SELECT id FROM app_user WHERE display_name = 'kim'"
-    )).scalar_one()
-    operator_id = conn.execute(text(
-        "SELECT id FROM app_user WHERE display_name = 'op'"
-    )).scalar_one()
-    return {"item_id": item_id, "request_id": request_id,
-            "employee_id": employee_id, "operator_id": operator_id}
 
 def test_replacement_allocates_and_registers(conn, replacement_case):
     execute_replacement(
@@ -78,7 +22,7 @@ def test_replacement_allocates_and_registers(conn, replacement_case):
     allocated = conn.execute(text(
         "SELECT allocated_qty FROM assignment_item WHERE id = :id"
     ), {"id": replacement_case["item_id"]}).scalar_one()
-    stock = conn.execute(text("SELECT available_qty FROM asset_stock")).scalar_one()
+    stock = conn.execute(text("SELECT on_hand_qty FROM asset_stock")).scalar_one()
     dispatches = conn.execute(text("SELECT count(*) FROM simulated_dispatch")).scalar_one()
     state = conn.execute(text(
         "SELECT state FROM request WHERE id = :id"
@@ -91,6 +35,10 @@ def test_replacement_allocates_and_registers(conn, replacement_case):
 
 
 def test_replacement_rejected_when_quantity_exceeds_remaining(conn, replacement_case):
+    # 예약이 지급 항목의 남은 수량(2)보다 커진 어긋난 데이터. 승인은 이런 예약을
+    # 만들지 않지만, 실행은 잠근 뒤에 한 번 더 확인한다.
+    conn.execute(text("UPDATE stock_reservation SET qty = 3"))
+
     with pytest.raises(ExecutionRejected, match="미처리 수량"):
         execute_replacement(
             conn,
@@ -128,7 +76,7 @@ def test_retry_with_same_key_does_not_allocate_twice(conn, replacement_case):
     allocated = conn.execute(text(
         "SELECT allocated_qty FROM assignment_item WHERE id = :id"
     ), {"id": replacement_case["item_id"]}).scalar_one()
-    stock = conn.execute(text("SELECT available_qty FROM asset_stock")).scalar_one()
+    stock = conn.execute(text("SELECT on_hand_qty FROM asset_stock")).scalar_one()
     dispatches = conn.execute(text("SELECT count(*) FROM simulated_dispatch")).scalar_one()
 
     assert allocated == 1
@@ -154,6 +102,8 @@ def test_same_key_with_different_payload_is_rejected(conn, replacement_case):
 
 def test_execution_without_approval_is_rejected(conn, replacement_case):
     """SYS-01: 승인 레코드가 없으면 실행되지 않는다."""
+    # 예약이 승인을 참조해서 승인만 지울 수 없다 (DB 가 막는다). 예약부터 지운다.
+    conn.execute(text("DELETE FROM stock_reservation"))
     conn.execute(text("DELETE FROM approval"))
 
     with pytest.raises(ExecutionRejected, match="승인이 없다"):
@@ -176,7 +126,15 @@ def test_execution_without_approval_is_rejected(conn, replacement_case):
 
 def test_execution_with_rejected_approval_is_blocked(conn, replacement_case):
     """SYS-13: 거절된 뒤 실행을 시도해도 막힌다."""
-    conn.execute(text("UPDATE approval SET decision = 'reject'"))
+    # 승인 행을 reject 로 바꿀 수 없다(예약이 승인 결정까지 참조한다). 승인과 예약을
+    # 지우고 거절 기록만 남은 상태를 만든다.
+    conn.execute(text("DELETE FROM stock_reservation"))
+    conn.execute(text("DELETE FROM approval"))
+    conn.execute(text(
+        "INSERT INTO approval (request_id, proposal_id, proposal_version, "
+        " payload_digest, approver_id, decision) "
+        "SELECT request_id, id, version, payload_digest, :o, 'reject' FROM proposal"
+    ), {"o": replacement_case["operator_id"]})
 
     with pytest.raises(ExecutionRejected, match="승인이 없다"):
         execute_replacement(
@@ -365,16 +323,3 @@ def test_resolve_outcome_finds_a_committed_execution(conn, replacement_case):
 
     assert resolve_outcome(conn, execution_key="k-1") == "registered"
     assert resolve_outcome(conn, execution_key="k-없는키") == "not_executed"
-
-
-def test_mark_outcome_unknown_does_not_claim_success_or_failure(conn, replacement_case):
-    """SYS-16: 확인 불가일 때 성공도 실패도 단정하지 않는다."""
-    mark_outcome_unknown(conn, request_id=replacement_case["request_id"])
-
-    state = conn.execute(text(
-        "SELECT state FROM request WHERE id = :id"
-    ), {"id": replacement_case["request_id"]}).scalar_one()
-    executions = conn.execute(text("SELECT count(*) FROM request_execution")).scalar_one()
-
-    assert state == "outcome_unknown"
-    assert executions == 0

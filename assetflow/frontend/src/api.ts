@@ -13,8 +13,23 @@ export type PendingProposal = {
   asset_name: string
   qty: number
   allocated_qty: number
-  remaining: number
-  stock: number
+  remaining_item_qty: number
+  held_item_qty: number
+  reservable_item_qty: number
+  on_hand_qty: number
+  held_stock_qty: number
+  reservable_stock_qty: number
+  reservation_status: 'held' | 'consumed' | 'released' | null
+  reservation_qty: number | null
+}
+
+export type ProposalActionResult = {
+  outcome: string
+  request_id: number | null
+  proposal_id: number
+  reservation_id?: number | null
+  reason_code?: string | null
+  detail?: string | null
 }
 
 export type TraceRow = {
@@ -68,13 +83,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function listPending(
-  state = 'awaiting_approval',
+  state: string,
+  userId: number,
 ): Promise<{ items: PendingProposal[] }> {
-  return request(`/proposals/pending?state=${state}`)
+  return request(`/proposals/pending?state=${state}`, {
+    headers: { 'x-user-id': String(userId) },
+  })
 }
 
-export function getTrace(requestId: number): Promise<{ items: TraceRow[] }> {
-  return request(`/requests/${requestId}/trace`)
+export function getTrace(
+  requestId: number,
+  userId: number,
+): Promise<{ items: TraceRow[] }> {
+  return request(`/requests/${requestId}/trace`, {
+    headers: { 'x-user-id': String(userId) },
+  })
 }
 
 export function decide(
@@ -101,6 +124,30 @@ export function execute(
   })
 }
 
+export function releaseProposal(
+  proposalId: number,
+  reason: string,
+  userId: number,
+): Promise<ProposalActionResult> {
+  return request(`/proposals/${proposalId}/release`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export function reReviewProposal(
+  proposalId: number,
+  reason: string,
+  userId: number,
+): Promise<ProposalActionResult> {
+  return request(`/proposals/${proposalId}/re-review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
+    body: JSON.stringify({ reason }),
+  })
+}
+
 export function submitAssetRequest(
   message: string,
   userId: number,
@@ -116,10 +163,14 @@ export function submitAssetRequest(
   })
 }
 
-export function listRuns(): Promise<{ items: RunSummary[] }> {
-  return request('/observability/runs')
+export function listRuns(userId: number): Promise<{ items: RunSummary[] }> {
+  return request('/observability/runs', {
+    headers: { 'x-user-id': String(userId) },
+  })
 }
 
-export function getRun(runId: string): Promise<{ items: RunNode[] }> {
-  return request(`/observability/runs/${runId}`)
+export function getRun(runId: string, userId: number): Promise<{ items: RunNode[] }> {
+  return request(`/observability/runs/${runId}`, {
+    headers: { 'x-user-id': String(userId) },
+  })
 }

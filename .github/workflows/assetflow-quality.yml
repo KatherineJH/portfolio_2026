@@ -107,7 +107,10 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8080/ > /dev/null
           curl -fsS http://127.0.0.1:8080/api/health
-          curl -fsS "http://127.0.0.1:8080/api/observability/runs?limit=1"
+          # Read APIs resolve the caller from the database. The CI stack has no seeded users,
+          # so a 401 for an unknown user proves proxy -> API -> DB and that auth is enforced.
+          status=$(curl -sS -o /dev/null -w "%{http_code}" -H "x-user-id: 999999" "http://127.0.0.1:8080/api/observability/runs?limit=1")
+          test "$status" = 401
 
       - name: Show service logs on failure
         if: failure()

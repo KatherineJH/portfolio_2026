@@ -1,18 +1,29 @@
-"""워크플로 실행 관측 조회. 업무 상태를 변경하지 않는다."""
+"""워크플로 실행 관측 조회. 업무 상태를 변경하지 않는다. IT 담당자만 조회한다."""
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import Connection, text
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 
-from app.db import get_conn
+from app.db import DBConn
+from app.deps import current_user
 
 router = APIRouter(prefix="/observability", tags=["observability"])
 
 
+def _require_it_operator(user: dict) -> None:
+    if user["kind"] != "it_operator":
+        raise HTTPException(status_code=403, detail="IT 담당자만 실행 기록을 조회할 수 있다")
+
+
 @router.get("/runs")
-def list_runs(limit: int = 20, conn: Connection = Depends(get_conn)):
+def list_runs(
+    conn: DBConn,
+    limit: int = 20,
+    user: dict = Depends(current_user),
+):
     """최근 실행을 run_id 단위로 요약한다."""
+    _require_it_operator(user)
     safe_limit = min(max(limit, 1), 100)
     rows = conn.execute(text(
         "SELECT run_id::text AS run_id, min(started_at) AS started_at, "
@@ -32,8 +43,13 @@ def list_runs(limit: int = 20, conn: Connection = Depends(get_conn)):
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: UUID, conn: Connection = Depends(get_conn)):
+def get_run(
+    run_id: UUID,
+    conn: DBConn,
+    user: dict = Depends(current_user),
+):
     """한 실행의 노드를 시간 순서로 돌려준다."""
+    _require_it_operator(user)
     rows = conn.execute(text(
         "SELECT node_name, attempt_no, started_at, ended_at, latency_ms, "
         "       model, prompt_tokens, completion_tokens, cost_usd, "

@@ -16,15 +16,16 @@ All people, policies, assets, and requests are synthetic. Dispatch is simulated 
 4. Server rules choose one route: request information, require review, escalate, or propose an action.
 5. The response explains the reason and shows a versioned policy reference.
 6. An IT operator reviews the proposal; approval permission is checked from the database.
-7. Immediately before execution, the backend revalidates the proposal version, remaining quantity, and stock.
-8. Successful execution updates allocation and inventory and writes an idempotent simulated-dispatch record.
+7. Approval atomically creates a version-bound reservation for stock and the employee's remaining assignment quantity.
+8. Execution revalidates the reservation and converts it from `held` to `consumed` while updating allocation and inventory.
+9. Operators can release an unconsumed reservation, re-review the request, and approve it again without deleting history.
 
 ## Interface
 
 The React application has three workspaces:
 
 - **Request intake** — employee personas (`kim`, `lee`, `park`), real LLM calls, route-specific responses, and cited policies.
-- **Approval management** — operator personas, permission enforcement, approval or rejection, and simulated execution.
+- **Approval management** — approval, reserved/on-hand quantity display, execution, reservation release, and re-review.
 - **Workflow observability** — run-level latency, token use, estimated cost, outcome, and node timelines.
 
 Persona switching is a demo feature, not authentication. The browser sends `x-user-id` to reproduce scenarios. A production service would validate a signed token or session and derive a trusted user identity in the backend.
@@ -33,12 +34,14 @@ Persona switching is a demo feature, not authentication. The browser sends `x-us
 
 - **Evidence is not authority.** Policy text supports a proposal; an LLM response cannot approve or execute it.
 - **Approval is version-bound.** Approval stores the proposal version and payload digest reviewed by the operator.
-- **Authorization is server-owned.** The API reads `can_approve` from PostgreSQL.
+- **Approval reserves quantity.** Approval and its `held` stock/assignment reservation commit together.
+- **Authorization is server-owned.** The API reads `can_approve` from PostgreSQL. Read APIs also resolve the demo identity: assignment history is visible to the employee or an IT operator, and pending proposals, request traces, and run observability are limited to IT operators.
 - **Execution is idempotent.** An execution key prevents duplicate simulated dispatches.
-- **Mutable facts are revalidated.** Remaining quantity and stock are locked and checked in the execution transaction.
+- **Locks have one order.** Mutation paths lock request, assignment item, stock, then reservation as needed.
+- **Success follows commit.** Database commit completes before an HTTP success response is sent.
 - **Observability is first-class.** Nodes record latency, model usage, estimated cost, result, and failure information.
 
-See [ADR-001](docs/adr/001-claim-execution.md) for transaction and locking decisions.
+See [ADR-001](docs/adr/001-claim-execution.md) for the execution identity and transaction boundary, and [ADR-002](docs/adr/002-stock-reservation.md) for reservation, release, and re-review decisions.
 
 ## Architecture
 
@@ -80,7 +83,7 @@ The frozen evaluation used `gpt-4o-mini` at temperature 0 and `text-embedding-3-
 | LLM cost per request | approximately $0.000227 |
 | LLM-node latency p95 | 1,544 ms |
 | Database-node latency p95 | under 5 ms |
-| Automated tests | 47 passed |
+| Automated tests | 287 passed |
 
 The held-out set contains 16 synthetic cases and was authored within the same project. These results demonstrate reproducibility on the supplied scenarios, not production generalization. See [Evaluation Results](docs/EVALUATION-RESULTS.md) and [experiment history](analysis/experiments.csv).
 
@@ -171,24 +174,26 @@ cd ai-service
 uv run pytest -q
 ```
 
-Verified on 2026-10-05: `47 passed` with one non-blocking LangGraph deprecation warning.
+Verified locally on 2026-10-07: `287 passed` with one non-blocking LangGraph pending-deprecation warning. The 24 concurrency tests passed three consecutive runs on 2026-10-06.
 
 ```powershell
 cd frontend
 npm run build
 ```
 
-Verified on 2026-10-04: TypeScript compilation and the Vite production build completed successfully.
+Verified locally on 2026-10-06: ESLint, TypeScript compilation, and the Vite production build completed successfully.
 
-Manual end-to-end verification covered:
+The 2026-10-06 isolated Docker verification used a new Compose project and empty volume. It covered:
 
-- real LLM intake with policy evidence;
-- a review-required route;
-- rejection of approval by an operator without permission;
-- successful approval by an authorized operator;
-- transition to execution readiness;
-- simulated execution with allocation `0 -> 2`, inventory `4 -> 2`, an execution-ledger entry, and one simulated dispatch; and
-- workflow observability with latency, tokens, model, and estimated cost.
+- migration, seed, and healthy database/API/web containers;
+- successful approval with reservation and a competing approval refused for insufficient assignment quantity;
+- reservation release, re-review, re-approval, and execution;
+- authorization failures for approval, release, and re-review;
+- identical execution retry returning the existing result;
+- execution-ledger status lookup and persistence after container restart; and
+- zero violations for held-stock, assignment-capacity, and consumed-dispatch invariants.
+
+This Docker run did not call OpenAI. The earlier measured evaluation remains the evidence for LLM routing and citation behavior. The current feature branch needs a pull request or manual workflow dispatch (or must reach `main`) before its GitHub Actions result can be recorded as CI-verified.
 
 ## Repository guide
 
@@ -203,12 +208,15 @@ Manual end-to-end verification covered:
 - [`docs/EVALUATION-RESULTS.md`](docs/EVALUATION-RESULTS.md) — measurements and limitations
 - [`docs/OPERATIONS-EVIDENCE.md`](docs/OPERATIONS-EVIDENCE.md) — CI, local runtime, and deployment evidence
 - [`docs/adr/001-claim-execution.md`](docs/adr/001-claim-execution.md) — approval and execution ADR
+- [`docs/adr/002-stock-reservation.md`](docs/adr/002-stock-reservation.md) — stock reservation, release, and re-review ADR
 
 ## Limitations
 
 - Authentication is simulated with selectable personas and `x-user-id`.
 - All business data and policies are synthetic.
 - Dispatch is simulated.
+- Reservations have no automatic expiry; an authorized operator releases them manually.
+- Creating a replacement proposal version is not exposed yet.
 - Legacy compatibility does not provide persisted intake-key deduplication or vector retrieval when chunks are absent.
 - The evaluation is small and domain-specific.
 - The application is verified locally and is not presented as production infrastructure.

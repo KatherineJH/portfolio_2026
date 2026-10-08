@@ -40,7 +40,7 @@ def show(obj) -> None:
 def stock_of(code: str) -> int:
     with engine.begin() as conn:
         return conn.execute(text(
-            "SELECT s.available_qty FROM asset_stock s "
+            "SELECT s.on_hand_qty FROM asset_stock s "
             "JOIN asset_model m ON m.id = s.asset_model_id WHERE m.code = :code"
         ), {"code": code}).scalar_one()
 
@@ -99,7 +99,9 @@ def main() -> None:
     print(f"run_id 동일: {same}   (LLM 을 두 번 부르지 않았다)")
 
     step(3, "승인 대기 목록 — 담당자가 판단할 사실이 한 화면에")
-    pending = client.get("/proposals/pending").json()["items"]
+    pending = client.get(
+        "/proposals/pending", headers={"x-user-id": str(OPERATOR_OK)},
+    ).json()["items"]
     for item in pending:
         print(f"{item['requester']} / {item['asset_name']} ({item['asset_code']})")
         print(f"  처리안    {item['payload']['qty']}개 교체")
@@ -156,7 +158,9 @@ def main() -> None:
     print(f"  요청 상태   {state}")
 
     step(9, "처리 과정 — 노드별 지연·모델·비용")
-    trace = client.get(f"/requests/{request_id}/trace").json()["items"]
+    trace = client.get(
+        f"/requests/{request_id}/trace", headers={"x-user-id": str(OPERATOR_OK)},
+    ).json()["items"]
     print(f"  {'노드':<10}{'결과':<7}{'지연':>8}  {'모델':<14}{'비용':>10}")
     for r in trace:
         cost = f"${r['cost_usd']:.6f}" if r["cost_usd"] else "-"
