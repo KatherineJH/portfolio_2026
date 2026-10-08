@@ -1,9 +1,9 @@
 # 002. Reserve quantity when a proposal is approved
 
 Date: 2026-10-06
-Status: Accepted, implemented and locally verified (2026-10-06). This record supersedes only the inventory decision of [ADR-001](001-claim-execution.md). The server-issued execution key, PostgreSQL authority, and single application/database transaction boundary from ADR-001 remain in force.
+Status: Accepted, implemented and locally verified (2026-10-06); merged to `main` through PR #1 with all three CI jobs passing (2026-10-08). This record supersedes only the inventory decision of [ADR-001](001-claim-execution.md). The server-issued execution key, PostgreSQL authority, and single application/database transaction boundary from ADR-001 remain in force.
 
-Implementation note: the vertical change is complete in the feature branch: schema and migration, reservation on approval, approval guard, consumption on execution, release and revoke, re-review, outcome lookup, quantity fields and operator UI, automated tests, Docker E2E, and documentation. Current-branch CI remains unverified until the branch is pushed and GitHub Actions succeeds.
+Implementation note: the vertical change was completed in `feat/stock-reservation` and merged to `main` through PR #1 (merge commit `9214823`): schema and migration, reservation on approval, approval guard, consumption on execution, release and revoke, re-review, outcome lookup, quantity fields and operator UI, automated tests, Docker E2E, and documentation. On 2026-10-08, PR #1 and the merge commit passed the backend, frontend, and Docker CI jobs.
 
 ## Context
 

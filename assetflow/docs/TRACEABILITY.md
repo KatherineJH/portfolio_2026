@@ -2,8 +2,9 @@
 
 상태: 구현 및 로컬 검증 완료(2026-10-07). 전체 백엔드 스위트는 287개이며 pgvector
 PostgreSQL Testcontainer에서 통과했다. 동시성 테스트 24개는 3회 연속 통과했다.
-프런트엔드 lint와 production build도 통과했다. 현재 브랜치의 GitHub Actions 결과는
-pull request, manual dispatch, or merge to `main` 이후 별도로 확인해야 하며, 로컬 결과를 CI 결과로 표기하지 않는다.
+프런트엔드 lint와 production build도 통과했다. 2026-10-08 PR #1과 `main` 병합 커밋
+`9214823`에서 GitHub Actions 3개 작업(백엔드, 프런트, Docker smoke·이미지 스캔)이 통과했다.
+로컬 결과와 CI 결과는 구분해서 표기한다.
 
 ## 요구사항별 근거
 
@@ -59,12 +60,11 @@ pull request, manual dispatch, or merge to `main` 이후 별도로 확인해야 
   - `GET /employees/{id}/assignments`: 본인 또는 IT 담당자.
   - 헤더 없음 422, 미등록 사용자 401, 권한 없음 403, 승인 권한 없는 담당자는 조회 가능(`test_pending_quantities.py`, `test_read_authorization.py`).
 - `pytest -q`: 287 passed(262 → 266: `test_pending_quantities.py` 4개 추가, 266 → 287: `test_read_authorization.py` 21개 추가). `npm run lint`, `npm run build`: 통과.
-- 원격 CI: 아직 실행되지 않음. 위 결과는 모두 로컬 실행이다.
+- 위 결과는 로컬 실행이다. 원격 CI는 2026-10-08 PR #1과 `main` 병합 커밋 `9214823`에서 3개 작업 모두 통과했다.
 
 ## 아직 주장하지 않는 것
 
 - 전용 prompt-injection stress셋의 최종 결과
-- pull request·manual dispatch·`main` 반영 전 현재 287개 스위트의 GitHub Actions 통과
 - 공개 클라우드 배포, 실제 사용자·재고·지급 데이터
 - 외부 지급 시스템을 포함한 exactly-once 실행
 - 자동 예약 만료, 고가용성, 부하·SLO 검증

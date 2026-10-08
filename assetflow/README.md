@@ -193,7 +193,7 @@ The 2026-10-06 isolated Docker verification used a new Compose project and empty
 - execution-ledger status lookup and persistence after container restart; and
 - zero violations for held-stock, assignment-capacity, and consumed-dispatch invariants.
 
-This Docker run did not call OpenAI. The earlier measured evaluation remains the evidence for LLM routing and citation behavior. The current feature branch needs a pull request or manual workflow dispatch (or must reach `main`) before its GitHub Actions result can be recorded as CI-verified.
+This Docker run did not call OpenAI. The earlier measured evaluation remains the evidence for LLM routing and citation behavior. On 2026-10-08, PR #1 and the `main` merge commit `9214823` passed all three GitHub Actions jobs: backend tests, frontend lint and build, and the Docker smoke test and image scan. CI does not repeat the Docker end-to-end steps above; see [Operations Evidence](docs/OPERATIONS-EVIDENCE.md).
 
 ## Repository guide
 
