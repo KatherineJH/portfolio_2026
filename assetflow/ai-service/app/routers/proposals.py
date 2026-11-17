@@ -37,6 +37,7 @@ def list_pending(
 
     rows = conn.execute(text(
         "SELECT p.id AS proposal_id, p.request_id, p.version, p.payload, "
+        "       p.payload_digest, "
         "       p.policy_refs, p.created_at, "
         "       u.display_name AS requester, "
         "       m.code AS asset_code, m.name AS asset_name, "

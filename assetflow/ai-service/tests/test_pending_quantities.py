@@ -41,6 +41,9 @@ def test_pending_quantities_count_only_held_reservations(api, head_db):
     assert row["reservable_item_qty"] == 3
     assert row["reservation_status"] == "held"
     assert row["reservation_qty"] == 2
+    # 화면은 승인과 실행이 결속된 처리안 버전·digest를 그대로 보여준다.
+    assert row["version"] == 1
+    assert row["payload_digest"] == a["digest"]
 
 
 def test_released_reservations_do_not_reduce_the_quantities(api, head_db):

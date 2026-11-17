@@ -1,20 +1,14 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import {
-  decide,
-  execute,
   getRun,
-  getTrace,
   listRuns,
-  listPending,
-  releaseProposal,
-  reReviewProposal,
   submitAssetRequest,
   type IntakeResponse,
-  type PendingProposal,
   type RunNode,
   type RunSummary,
-  type TraceRow,
 } from './api'
+import { ApprovalsView } from './approvals/ApprovalsView'
+import type { Operator } from './approvals/model'
 import './App.css'
 
 const DEMO_PERSONAS = [
@@ -23,10 +17,11 @@ const DEMO_PERSONAS = [
   { id: 3, name: 'park', role: 'Employee', initials: 'PA' },
 ] as const
 
-const DEMO_OPERATORS = [
-  { id: 4, name: 'op-song', role: 'IT Operator · Approver', initials: 'OS' },
-  { id: 5, name: 'op-jung', role: 'IT Operator · Viewer', initials: 'OJ' },
-] as const
+// 시드 데이터의 can_approve 와 같다. 화면은 버튼 상태에만 쓰고, 권한 판단은 서버가 한다.
+const DEMO_OPERATORS: readonly Operator[] = [
+  { id: 4, name: 'op-song', role: 'IT Operator · Approver', initials: 'OS', canApprove: true },
+  { id: 5, name: 'op-jung', role: 'IT Operator · Viewer', initials: 'OJ', canApprove: false },
+]
 
 type ChatEntry =
   | { id: string; role: 'user'; content: string; persona: string }
@@ -38,6 +33,20 @@ const ROUTE_COPY: Record<IntakeResponse['route'], { label: string; tone: string 
   need_review: { label: '담당자 검토 필요', tone: 'warning' },
   escalate: { label: '담당자 이관', tone: 'danger' },
 }
+
+// 인용이 비는 이유는 코드가 정한다 (pick_policy_refs). 화면은 그 이유를 그대로 설명한다.
+function citationGap(result: IntakeResponse): string {
+  if (result.target_item_id === null) {
+    return '대상 자산이 특정되지 않아 규정을 인용하지 않았습니다.'
+  }
+  return '검색 후보에 이 처리 경로의 주제 규정이 없어 인용을 보류했습니다. 다른 규정을 대신 인용하지 않습니다.'
+}
+
+const WORKFLOW_NODES = [
+  { name: 'load', copy: '임직원의 지급 자산·미처리 수량·점검 상태 조회' },
+  { name: 'retrieve', copy: '요청문과 가까운 규정 후보 검색 (pgvector)' },
+  { name: 'decide', copy: 'LLM이 대상 자산과 귀책 주제를 판단하고, 처리 경로는 서버 규칙이 결정' },
+]
 
 function App() {
   const [view, setView] = useState<'intake' | 'approvals' | 'observability'>('intake')
@@ -52,21 +61,11 @@ function App() {
   const [openRun, setOpenRun] = useState<string | null>(null)
   const [runsLoading, setRunsLoading] = useState(false)
   const [runsError, setRunsError] = useState<string | null>(null)
-  const [items, setItems] = useState<PendingProposal[]>([])
   const [operatorId, setOperatorId] = useState(4)
-  const [busy, setBusy] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'awaiting_approval' | 'ready_to_execute' | 'needs_review'>(
-  'awaiting_approval',
-  )
-  const [openTrace, setOpenTrace] = useState<number | null>(null)
-  const [traces, setTraces] = useState<Record<number, TraceRow[]>>({})
   const employeePersona = DEMO_PERSONAS.find((item) => item.id === personaId) ?? DEMO_PERSONAS[0]
+  const operator = DEMO_OPERATORS.find((item) => item.id === operatorId) ?? DEMO_OPERATORS[0]
   const activePersonas = view === 'intake' ? DEMO_PERSONAS : DEMO_OPERATORS
-  const activePersona = view === 'intake'
-    ? employeePersona
-    : DEMO_OPERATORS.find((item) => item.id === operatorId) ?? DEMO_OPERATORS[0]
+  const activePersona = view === 'intake' ? employeePersona : operator
 
   async function onSubmitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -131,107 +130,21 @@ function App() {
     }
   }
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await listPending(tab, operatorId)
-      setItems(data.items)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [tab, operatorId])
-
-  // onDecide 핸들러 추가
-  async function onDecide(proposalId: number, choice: 'approve' | 'reject') {
-    setBusy(proposalId)
-    setError(null)
-    try {
-      await decide(proposalId, choice, operatorId)
-      await refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  // 실행 핸들러 추가
-  async function onExecute(item: PendingProposal) {
-    setBusy(item.proposal_id)
-    setError(null)
-    try {
-      await execute(item.request_id, item.version, operatorId)
-      await refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  async function onRelease(item: PendingProposal) {
-    if (busy !== null) return
-    const reason = window.prompt('예약을 해제하는 사유를 입력해 주세요.')?.trim()
-    if (!reason || !window.confirm('이 예약을 해제하고 요청을 재검토 상태로 바꿀까요?')) return
-
-    setBusy(item.proposal_id)
-    setError(null)
-    try {
-      await releaseProposal(item.proposal_id, reason, operatorId)
-      await refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  async function onReReview(item: PendingProposal) {
-    if (busy !== null) return
-    const reason = window.prompt('재검토 사유를 입력해 주세요.')?.trim()
-    if (!reason || !window.confirm('이 요청을 다시 승인 대기 상태로 보낼까요?')) return
-
-    setBusy(item.proposal_id)
-    setError(null)
-    try {
-      await reReviewProposal(item.proposal_id, reason, operatorId)
-      await refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  // Trace Toggle 핸들러 추가
-  async function onToggleTrace(item: PendingProposal) {
-    if (openTrace === item.request_id) {
-      setOpenTrace(null)
-      return
-    }
-    setOpenTrace(item.request_id)
-    if (traces[item.request_id]) return
-    try {
-      const data = await getTrace(item.request_id, operatorId)
-      setTraces((prev) => ({ ...prev, [item.request_id]: data.items }))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void refresh(), 0)
-    return () => window.clearTimeout(timer)
-  }, [refresh])
-
   useEffect(() => {
     if (view !== 'observability') return
     const timer = window.setTimeout(() => void refreshRuns(), 0)
     return () => window.clearTimeout(timer)
   }, [refreshRuns, view])
+
+  const latencies = runs.map((run) => run.total_latency_ms)
+  const runStats = {
+    count: runs.length,
+    avgLatency: runs.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / runs.length) : 0,
+    maxLatency: runs.length ? Math.max(...latencies) : 0,
+    tokens: runs.reduce((sum, run) => sum + run.prompt_tokens + run.completion_tokens, 0),
+    cost: runs.reduce((sum, run) => sum + Number(run.cost_usd), 0),
+    failed: runs.filter((run) => run.has_failure).length,
+  }
 
   return (
     <div className="app-shell">
@@ -245,6 +158,7 @@ function App() {
         </div>
 
         <nav className="primary-nav" aria-label="주요 메뉴">
+          <span className="nav-group">Agent</span>
           <button
             className={view === 'intake' ? 'nav-item active' : 'nav-item'}
             onClick={() => setView('intake')}
@@ -252,6 +166,7 @@ function App() {
             <span className="nav-icon" aria-hidden="true">+</span>
             요청 접수
           </button>
+          <span className="nav-group">Control · Observe</span>
           <button
             className={view === 'approvals' ? 'nav-item active' : 'nav-item'}
             onClick={() => setView('approvals')}
@@ -332,9 +247,9 @@ function App() {
 
         {view === 'intake' && (
           <section className="intake-view">
-            <span className="eyebrow">Employee workspace</span>
+            <span className="eyebrow">Employee workspace · Agent workflow</span>
             <h1>자산 요청 접수</h1>
-            <p>자연어로 자산 교체 요청을 접수하고 정책 근거가 포함된 처리 결과를 확인합니다.</p>
+            <p>자연어 요청을 Agent 워크플로가 처리합니다. 규정 검색으로 근거를 찾고, 처리 경로는 서버 규칙이 정합니다.</p>
 
             <div className="chat-layout">
               <div className="chat-panel">
@@ -386,7 +301,7 @@ function App() {
                           <strong>정책 근거</strong>
                           <div className="policy-list">
                             {entry.result.policy_refs.length === 0 ? (
-                              <span className="muted">적용된 정책 근거 없음</span>
+                              <span className="citation-gap">{citationGap(entry.result)}</span>
                             ) : (
                               entry.result.policy_refs.map((ref) => (
                                 <span className="policy-chip" key={`${ref.policy_key}-${ref.version}`}>
@@ -465,6 +380,17 @@ function App() {
                     <button type="button" onClick={() => fillExample('USB-C 독이 고장 나서 교체하고 싶습니다.')}>점검 반려 자산 요청</button>
                   </>
                 )}
+                <div className="workflow-card">
+                  <strong>Agent 워크플로 (LangGraph)</strong>
+                  <ol>
+                    {WORKFLOW_NODES.map((node) => (
+                      <li key={node.name}>
+                        <code>{node.name}</code>
+                        <span>{node.copy}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
                 <div className="guardrail-note">
                   <strong>AI 권한 범위</strong>
                   <p>AI는 처리안을 제안하지만 승인하거나 자산을 지급하지 않습니다.</p>
@@ -476,16 +402,24 @@ function App() {
 
         {view === 'observability' && (
           <section className="observability-view">
-            <div className="observability-heading">
+            <div className="view-heading">
               <div>
-                <span className="eyebrow">Workflow observability</span>
+                <span className="eyebrow">Operator workspace · Workflow observability</span>
                 <h1>처리 관측</h1>
-                <p>실행별 지연, 모델 사용량, 비용과 노드 처리 결과를 확인합니다.</p>
+                <p>Agent 실행별 지연, 모델 사용량, 비용과 노드 처리 결과를 확인합니다. IT 담당자만 조회할 수 있습니다.</p>
               </div>
-              <button type="button" onClick={refreshRuns} disabled={runsLoading}>
+              <button type="button" className="btn btn-secondary" onClick={() => void refreshRuns()} disabled={runsLoading}>
                 {runsLoading ? '불러오는 중' : '새로고침'}
               </button>
             </div>
+
+            <dl className="obs-summary" aria-label="최근 실행 요약">
+              <div><dt>최근 실행</dt><dd>{runStats.count}</dd><small>최대 20건</small></div>
+              <div><dt>평균 지연</dt><dd>{runStats.avgLatency.toLocaleString()}<small>ms</small></dd><small>최대 {runStats.maxLatency.toLocaleString()}ms</small></div>
+              <div><dt>총 토큰</dt><dd>{runStats.tokens.toLocaleString()}</dd><small>prompt + completion</small></div>
+              <div><dt>총 비용</dt><dd>${runStats.cost.toFixed(6)}</dd><small>모델 단가 기준 추정</small></div>
+              <div className={runStats.failed > 0 ? 'warn' : ''}><dt>실패 포함 실행</dt><dd>{runStats.failed}</dd><small>노드 실패가 있는 실행</small></div>
+            </dl>
 
             {runsError && <p className="error">오류: {runsError}</p>}
             {!runsLoading && !runsError && runs.length === 0 && (
@@ -543,168 +477,8 @@ function App() {
           </section>
         )}
 
-        {view === 'approvals' && (
-          <section>
-            <div className="page-heading">
-              <div>
-                <span className="eyebrow">Operator workspace</span>
-                <h1>승인 관리</h1>
-              </div>
-            </div>
-
-      <header className="approval-toolbar">
-        <nav className="tabs">
-          <button
-            className={tab === 'awaiting_approval' ? 'tab on' : 'tab'}
-            onClick={() => setTab('awaiting_approval')}
-          >
-            승인 대기
-          </button>
-          <button
-            className={tab === 'ready_to_execute' ? 'tab on' : 'tab'}
-            onClick={() => setTab('ready_to_execute')}
-          >
-            실행 대기
-          </button>
-          <button
-            className={tab === 'needs_review' ? 'tab on' : 'tab'}
-            onClick={() => setTab('needs_review')}
-          >
-            재검토
-          </button>
-        </nav>
-
-        <button onClick={refresh} disabled={loading}>
-          {loading ? '불러오는 중' : '새로고침'}
-        </button>
-      </header>
-
-      {error && <p className="error">오류: {error}</p>}
-
-      {!loading && !error && items.length === 0 && (
-        <p className="empty">
-          {tab === 'awaiting_approval'
-            ? '승인 대기 중인 요청이 없습니다.'
-            : tab === 'ready_to_execute'
-              ? '실행 대기 중인 요청이 없습니다.'
-              : '재검토가 필요한 요청이 없습니다.'}
-        </p>
-      )}
-
-
-      <ul className="cards">
-        {items.map((item) => (
-          <li key={item.proposal_id} className="card">
-            <div className="card-head">
-              <strong>{item.requester}</strong>
-              <span className="asset">
-                {item.asset_name} ({item.asset_code})
-              </span>
-            </div>
-            <dl className="facts">
-              <dt>처리안</dt>
-              <dd>{item.payload.qty}개 교체</dd>
-
-              <dt>지급 / 기처리</dt>
-              <dd>
-                {item.qty}개 / {item.allocated_qty}개
-              </dd>
-
-              <dt>지급 가능 / 예약</dt>
-              <dd>{item.reservable_item_qty}개 / {item.held_item_qty}개</dd>
-
-              <dt>재고 보유 / 예약</dt>
-              <dd>{item.on_hand_qty}개 / {item.held_stock_qty}개</dd>
-
-              <dt>승인 가능 재고</dt>
-              <dd>{item.reservable_stock_qty}개</dd>
-
-              {item.reservation_status && (
-                <>
-                  <dt>현재 예약</dt>
-                  <dd>{item.reservation_qty}개 · {item.reservation_status}</dd>
-                </>
-              )}
-
-              <dt>근거 규정</dt>
-              <dd>
-                {item.policy_refs.length === 0
-                  ? '없음'
-                  : item.policy_refs
-                      .map((p) => `${p.policy_key} v${p.version}`)
-                      .join(', ')}
-              </dd>
-            </dl>
-            <div className="actions">
-              {tab === 'awaiting_approval' ? (
-                <>
-                  <button
-                    onClick={() => onDecide(item.proposal_id, 'approve')}
-                    disabled={busy !== null}
-                  >
-                    승인
-                  </button>
-                  <button
-                    className="secondary"
-                    onClick={() => onDecide(item.proposal_id, 'reject')}
-                    disabled={busy !== null}
-                  >
-                    거절
-                  </button>
-                </>
-              ) : tab === 'ready_to_execute' ? (
-                <>
-                  <button onClick={() => onExecute(item)} disabled={busy !== null}>
-                    실행
-                  </button>
-                  <button className="secondary" onClick={() => onRelease(item)} disabled={busy !== null}>
-                    예약 해제
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => onReReview(item)} disabled={busy !== null}>
-                  재검토 요청
-                </button>
-              )}
-              <button className="secondary" onClick={() => onToggleTrace(item)} disabled={busy !== null}>
-                {openTrace === item.request_id ? '처리 과정 닫기' : '처리 과정'}
-              </button>
-            </div>
-            {openTrace === item.request_id && (
-              <table className="trace">
-                <thead>
-                  <tr>
-                    <th>노드</th>
-                    <th>결과</th>
-                    <th>지연</th>
-                    <th>모델</th>
-                    <th>토큰</th>
-                    <th>비용</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(traces[item.request_id] ?? []).map((row, i) => (
-                    <tr key={i}>
-                      <td>{row.node_name}</td>
-                      <td>{row.outcome}</td>
-                      <td>{row.latency_ms ?? '-'}ms</td>
-                      <td>{row.model ?? '-'}</td>
-                      <td>
-                        {row.prompt_tokens == null
-                          ? '-'
-                          : `${row.prompt_tokens} + ${row.completion_tokens}`}
-                      </td>
-                      <td>{row.cost_usd == null ? '-' : `$${Number(row.cost_usd).toFixed(6)}`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </li>
-        ))}
-      </ul>
-          </section>
-        )}
+        {/* 담당자가 바뀌면 이전 담당자의 결과 배너와 선택을 남기지 않는다. */}
+        {view === 'approvals' && <ApprovalsView key={operator.id} operator={operator} />}
       </main>
     </div>
   )

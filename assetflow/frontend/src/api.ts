@@ -6,6 +6,7 @@ export type PendingProposal = {
   request_id: number
   version: number
   payload: { action: string; assignment_item_id: number; qty: number }
+  payload_digest: string
   policy_refs: { policy_key: string; version: number }[]
   created_at: string
   requester: string
@@ -73,11 +74,28 @@ export type RunNode = TraceRow & {
   ended_at: string | null
 }
 
+// 서버가 거절 사유를 reason_code 로 주면 화면이 그대로 보여줄 수 있게 담아 둔다.
+export class ApiError extends Error {
+  readonly status: number
+  readonly reasonCode: string | null
+
+  constructor(message: string, status: number, reasonCode: string | null) {
+    super(message)
+    this.status = status
+    this.reasonCode = reasonCode
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, init)
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
-    throw new Error(body.detail ?? `${response.status} ${response.statusText}`)
+    const detail = typeof body.detail === 'string' ? body.detail : null
+    throw new ApiError(
+      detail ?? `${response.status} ${response.statusText}`,
+      response.status,
+      typeof body.reason_code === 'string' ? body.reason_code : null,
+    )
   }
   return response.json()
 }
@@ -104,7 +122,7 @@ export function decide(
   proposalId: number,
   decision: 'approve' | 'reject',
   userId: number,
-): Promise<{ request_id: number; decision: string; approver_id: number }> {
+): Promise<ProposalActionResult> {
   return request(`/proposals/${proposalId}/approval`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-user-id': String(userId) },
